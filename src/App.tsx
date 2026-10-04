@@ -86,6 +86,8 @@ export default function App() {
     return <AuthPanel auth={auth} />;
   }
 
+  const activeAuth = auth;
+
   async function addPatient(input: PatientInput) {
     if (!db || !user) return;
     const result = await createPatient(db, user.uid, input);
@@ -117,7 +119,7 @@ export default function App() {
         </nav>
         <div className="sidebar-footer">
           <div className="user-chip"><span>{user.email?.[0]?.toUpperCase() ?? 'P'}</span><div><strong>{user.email}</strong><small>Signed in</small></div></div>
-          <button className="button text inverse" onClick={() => signOut(auth)}>Sign out</button>
+          <button className="button text inverse" onClick={() => signOut(activeAuth)}>Sign out</button>
         </div>
       </aside>
 
