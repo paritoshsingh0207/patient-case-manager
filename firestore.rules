@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsPatient(patientId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/patients/$(patientId))
+        && get(/databases/$(database)/documents/patients/$(patientId)).data.ownerId == request.auth.uid;
+    }
+
+    function createsOwnedChild() {
+      return request.resource.data.ownerId == request.auth.uid;
+    }
+
+    function preservesOwnedChild() {
+      return resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    match /patients/{patientId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      allow read, delete: if signedIn()
+        && resource.data.ownerId == request.auth.uid;
+
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid;
+
+      match /cases/{caseId} {
+        allow read: if ownsPatient(patientId);
+        allow create: if ownsPatient(patientId) && createsOwnedChild();
+        allow update: if ownsPatient(patientId) && preservesOwnedChild();
+        allow delete: if ownsPatient(patientId) && resource.data.ownerId == request.auth.uid;
+      }
+
+      match /suggestions/{suggestionId} {
+        allow read: if ownsPatient(patientId);
+        allow create: if ownsPatient(patientId) && createsOwnedChild();
+        allow update: if ownsPatient(patientId) && preservesOwnedChild();
+        allow delete: if ownsPatient(patientId) && resource.data.ownerId == request.auth.uid;
+      }
+
+      match /followUps/{followUpId} {
+        allow read: if ownsPatient(patientId);
+        allow create: if ownsPatient(patientId) && createsOwnedChild();
+        allow update: if ownsPatient(patientId) && preservesOwnedChild();
+        allow delete: if ownsPatient(patientId) && resource.data.ownerId == request.auth.uid;
+      }
+
+      match /prescriptions/{prescriptionId} {
+        allow read: if ownsPatient(patientId);
+        allow create: if ownsPatient(patientId) && createsOwnedChild();
+        allow update: if ownsPatient(patientId) && preservesOwnedChild();
+        allow delete: if ownsPatient(patientId) && resource.data.ownerId == request.auth.uid;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

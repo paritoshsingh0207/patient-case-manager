@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc --noEmit -p tsconfig.app.json && vite build",
     "preview": "vite preview",
     "test": "vitest run src/lib/remedyEngine.test.ts",
     "test:rules": "firebase emulators:exec --project demo-patient-case-manager --only firestore \"vitest run tests/firestore.rules.test.ts\"",
