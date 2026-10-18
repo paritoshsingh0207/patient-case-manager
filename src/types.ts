@@ -1,5 +1,13 @@
 export type Sex = 'female' | 'male' | 'other' | 'prefer-not-to-say';
 
+export interface PractitionerAccess {
+  uid: string;
+  active: boolean;
+  role: 'practitioner' | 'admin' | 'unknown';
+  displayName?: string;
+  email?: string;
+}
+
 export interface Patient {
   id: string;
   ownerId: string;
