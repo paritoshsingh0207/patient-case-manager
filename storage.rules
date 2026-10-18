@@ -1,8 +1,30 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function isDesignatedPractitioner() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['practitioner', 'admin'];
+    }
+
+    function ownsPath(userId) {
+      return isDesignatedPractitioner() && request.auth.uid == userId;
+    }
+
+    function allowedAttachment() {
+      return request.resource.size <= 15 * 1024 * 1024
+        && request.resource.contentType != null
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+        );
+    }
+
     match /users/{userId}/patients/{patientId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if ownsPath(userId);
+      allow create, update: if ownsPath(userId) && allowedAttachment();
+      allow delete: if ownsPath(userId);
     }
 
     match /{allPaths=**} {
