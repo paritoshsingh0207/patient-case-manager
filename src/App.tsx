@@ -138,8 +138,10 @@ export default function App() {
     return <GateLoader message="Preparing secure workspace…" />;
   }
 
+  const activeAuth = auth;
+
   if (!user) {
-    return <AuthPanel auth={auth} />;
+    return <AuthPanel auth={activeAuth} />;
   }
 
   if (accessLoading || !accessChecked) {
@@ -147,10 +149,8 @@ export default function App() {
   }
 
   if (!authorized) {
-    return <AccessDenied email={user.email} onSignOut={() => signOut(auth)} />;
+    return <AccessDenied email={user.email} onSignOut={() => signOut(activeAuth)} />;
   }
-
-  const activeAuth = auth;
 
   async function addPatient(input: PatientInput) {
     if (!db || !user || !authorized) return;
