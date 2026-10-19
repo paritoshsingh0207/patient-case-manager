@@ -179,30 +179,31 @@ export default function App() {
     return <AccessDenied email={user.email} onSignOut={() => signOut(activeAuth)} />;
   }
 
-  const isAdmin = accessProfile.role === 'admin';
-  const isDoctor = accessProfile.role === 'doctor';
+  const activeUser = user;
+  const activeProfile = accessProfile;
+  const isAdmin = activeProfile.role === 'admin';
+  const isDoctor = activeProfile.role === 'doctor';
+  const practitionerName =
+    activeProfile.displayName ||
+    activeUser.displayName ||
+    activeUser.email?.split('@')[0] ||
+    (isAdmin ? 'Administrator' : 'Doctor');
 
   async function addPatient(input: PatientInput) {
-    const result = await createPatient(activeDb, user.uid, accessProfile.role, input);
+    const result = await createPatient(activeDb, activeUser.uid, activeProfile.role, input);
     setSelectedPatientId(result.id);
     setShowPatientForm(false);
   }
 
   async function addCase(input: CaseInput) {
     if (!selectedPatient || !isDoctor) return;
-    await createCase(activeDb, selectedPatient.id, user.uid, practitionerName, input);
+    await createCase(activeDb, selectedPatient.id, activeUser.uid, practitionerName, input);
   }
 
   async function persistSuggestion(input: CaseInput, result: SuggestionResult) {
     if (!selectedPatient || !isDoctor) return;
-    await saveSuggestion(activeDb, selectedPatient.id, user.uid, input, result);
+    await saveSuggestion(activeDb, selectedPatient.id, activeUser.uid, input, result);
   }
-
-  const practitionerName =
-    accessProfile.displayName ||
-    user.displayName ||
-    user.email?.split('@')[0] ||
-    (isAdmin ? 'Administrator' : 'Doctor');
 
   const navigation = (
     <>
