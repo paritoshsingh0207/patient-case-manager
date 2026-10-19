@@ -6,6 +6,7 @@ import {
 } from 'firebase/app-check';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFunctions, type Functions } from 'firebase/functions';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -25,6 +26,7 @@ let app: FirebaseApp | undefined;
 let appCheck: AppCheck | undefined;
 let auth: Auth | undefined;
 let db: Firestore | undefined;
+let functions: Functions | undefined;
 let storage: FirebaseStorage | undefined;
 
 if (firebaseReady) {
@@ -39,7 +41,8 @@ if (firebaseReady) {
 
   auth = getAuth(app);
   db = getFirestore(app);
+  functions = getFunctions(app);
   storage = getStorage(app);
 }
 
-export { app, appCheck, auth, db, storage };
+export { app, appCheck, auth, db, functions, storage };
