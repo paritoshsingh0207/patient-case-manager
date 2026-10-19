@@ -21,6 +21,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - run: npm install --no-audit --no-fund
+      - run: npm --prefix functions install --no-audit --no-fund
       - run: npm test
       - run: npm run test:rules
       - run: npm run build
+      - run: npm run build:functions
