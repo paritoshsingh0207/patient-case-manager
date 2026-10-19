@@ -69,6 +69,7 @@ function caseFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>, patientId: s
   return {
     id: snapshot.id,
     createdBy: data.createdBy ?? data.ownerId ?? '',
+    createdByName: data.createdByName,
     patientId,
     consultationDate: data.consultationDate,
     chiefComplaint: data.chiefComplaint,
@@ -162,11 +163,13 @@ export async function createCase(
   db: Firestore,
   patientId: string,
   userId: string,
+  createdByName: string,
   input: CaseInput,
 ) {
   const caseRef = await addDoc(collection(db, 'patients', patientId, 'cases'), {
     ...input,
     createdBy: userId,
+    createdByName,
     patientId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
