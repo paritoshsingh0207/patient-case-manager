@@ -120,9 +120,9 @@ export function MedicineCodeManager({ db, userId, canManage }: MedicineCodeManag
               <strong>{item.remedyName}</strong>
               <span>{item.active ? (item.notes || 'Internal medicine mapping') : `Archived · ${item.notes || 'historical mapping'}`}</span>
             </div>
-            {canManage ? (
+            {canManage && item.active ? (
               <button className="button danger-text" type="button" onClick={() => remove(item)}>
-                Delete
+                Archive
               </button>
             ) : null}
           </article>
