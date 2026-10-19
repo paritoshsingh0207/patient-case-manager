@@ -52,7 +52,7 @@ export function MedicineCodeManager({ db, userId, canManage }: MedicineCodeManag
   }
 
   async function remove(item: MedicineCode) {
-    if (!window.confirm(`Archive code ${item.code}? Existing prescriptions keep the code, but it will stop appearing in new prescriptions, but the historical lookup will remain.`)) {
+    if (!window.confirm(`Archive code ${item.code}? It will stop appearing in new prescriptions, while the historical lookup remains available.`)) {
       return;
     }
 
