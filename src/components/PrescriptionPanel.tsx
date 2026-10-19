@@ -12,6 +12,7 @@ interface PrescriptionPanelProps {
   patient: Patient;
   userId: string;
   practitionerName: string;
+  canPrescribe: boolean;
 }
 
 function localDate() {
@@ -29,6 +30,7 @@ export function PrescriptionPanel({
   patient,
   userId,
   practitionerName,
+  canPrescribe,
 }: PrescriptionPanelProps) {
   const [medicineCodes, setMedicineCodes] = useState<MedicineCode[]>([]);
   const [prescriptions, setPrescriptions] = useState<PrescriptionRecord[]>([]);
