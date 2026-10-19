@@ -125,86 +125,92 @@ export function PrescriptionPanel({
           <span className="status-pill">Code only</span>
         </div>
 
-        <form onSubmit={submit} className="prescription-form">
-          <label className="prescription-date">
-            Prescription date
-            <input type="date" required value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} />
-          </label>
-
-          <div className="prescription-items">
-            {items.map((item, index) => {
-              const remedyName = internalName(item.code);
-              return (
-                <div className="prescription-item-editor" key={index}>
-                  <label>
-                    Medicine code
-                    <select
-                      required
-                      value={item.code}
-                      onChange={(event) => updateItem(index, 'code', event.target.value)}
+        {canPrescribe ? (
+          <form onSubmit={submit} className="prescription-form">
+            <label className="prescription-date">
+              Prescription date
+              <input type="date" required value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} />
+            </label>
+  
+            <div className="prescription-items">
+              {items.map((item, index) => {
+                const remedyName = internalName(item.code);
+                return (
+                  <div className="prescription-item-editor" key={index}>
+                    <label>
+                      Medicine code
+                      <select
+                        required
+                        value={item.code}
+                        onChange={(event) => updateItem(index, 'code', event.target.value)}
+                      >
+                        <option value="">Select code</option>
+                        {activeCodes.map((medicine) => (
+                          <option key={medicine.id} value={medicine.code}>
+                            {medicine.code} — {medicine.remedyName}
+                          </option>
+                        ))}
+                      </select>
+                      {remedyName ? <small className="internal-remedy-hint">Internal: {remedyName}</small> : null}
+                    </label>
+                    <label>
+                      Directions visible to patient
+                      <input
+                        required
+                        value={item.directions}
+                        onChange={(event) => updateItem(index, 'directions', event.target.value)}
+                        placeholder="e.g. 4 pills twice daily"
+                      />
+                    </label>
+                    <label>
+                      Quantity / duration
+                      <input
+                        value={item.quantity ?? ''}
+                        onChange={(event) => updateItem(index, 'quantity', event.target.value)}
+                        placeholder="e.g. 7 days"
+                      />
+                    </label>
+                    <button
+                      className="button danger-text compact-button"
+                      type="button"
+                      onClick={() => removeItem(index)}
                     >
-                      <option value="">Select code</option>
-                      {activeCodes.map((medicine) => (
-                        <option key={medicine.id} value={medicine.code}>
-                          {medicine.code} — {medicine.remedyName}
-                        </option>
-                      ))}
-                    </select>
-                    {remedyName ? <small className="internal-remedy-hint">Internal: {remedyName}</small> : null}
-                  </label>
-                  <label>
-                    Directions visible to patient
-                    <input
-                      required
-                      value={item.directions}
-                      onChange={(event) => updateItem(index, 'directions', event.target.value)}
-                      placeholder="e.g. 4 pills twice daily"
-                    />
-                  </label>
-                  <label>
-                    Quantity / duration
-                    <input
-                      value={item.quantity ?? ''}
-                      onChange={(event) => updateItem(index, 'quantity', event.target.value)}
-                      placeholder="e.g. 7 days"
-                    />
-                  </label>
-                  <button
-                    className="button danger-text compact-button"
-                    type="button"
-                    onClick={() => removeItem(index)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          <button
-            className="button secondary add-line-button"
-            type="button"
-            onClick={() => setItems((current) => [...current, emptyItem()])}
-          >
-            + Add medicine
-          </button>
-
-          <label>
-            Patient instructions
-            <textarea
-              value={patientInstructions}
-              onChange={(event) => setPatientInstructions(event.target.value)}
-              placeholder="Diet, follow-up, precautions, or other patient-visible instructions."
-            />
-          </label>
-
-          <div className="case-actions">
-            <span className="quiet-note">Medicine names are not stored in the prescription document.</span>
-            <button className="button primary" type="submit" disabled={saving || !activeCodes.length}>
-              {saving ? 'Saving…' : 'Save coded prescription'}
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+  
+            <button
+              className="button secondary add-line-button"
+              type="button"
+              onClick={() => setItems((current) => [...current, emptyItem()])}
+            >
+              + Add medicine
             </button>
+  
+            <label>
+              Patient instructions
+              <textarea
+                value={patientInstructions}
+                onChange={(event) => setPatientInstructions(event.target.value)}
+                placeholder="Diet, follow-up, precautions, or other patient-visible instructions."
+              />
+            </label>
+  
+            <div className="case-actions">
+              <span className="quiet-note">Medicine names are not stored in the prescription document.</span>
+              <button className="button primary" type="submit" disabled={saving || !activeCodes.length}>
+                {saving ? 'Saving…' : 'Save coded prescription'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="admin-readonly-note">
+            Administrators can review and print prescriptions, but only doctors can create clinical prescriptions.
           </div>
-        </form>
+        )}
 
         {message ? <div className="save-message" role="status">{message}</div> : null}
 
