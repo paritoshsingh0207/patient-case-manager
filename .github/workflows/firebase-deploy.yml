@@ -30,7 +30,9 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - run: npm install --no-audit --no-fund
+      - run: npm --prefix functions install --no-audit --no-fund
       - run: npm test
       - run: npm run test:rules
       - run: npm run build
-      - run: npx firebase-tools deploy --project "${{ vars.VITE_FIREBASE_PROJECT_ID }}" --only hosting,firestore,storage
+      - run: npm run build:functions
+      - run: npx firebase-tools deploy --project "${{ vars.VITE_FIREBASE_PROJECT_ID }}" --only hosting,firestore,storage,functions
