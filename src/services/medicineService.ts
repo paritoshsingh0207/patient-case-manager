@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteDoc,
   doc,
   onSnapshot,
   serverTimestamp,
@@ -84,5 +83,13 @@ export async function saveMedicineCode(
 }
 
 export async function removeMedicineCode(db: Firestore, code: string) {
-  await deleteDoc(doc(db, 'medicineCodes', normalizeMedicineCode(code)));
+  const normalizedCode = normalizeMedicineCode(code);
+  await setDoc(
+    doc(db, 'medicineCodes', normalizedCode),
+    {
+      active: false,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 }
