@@ -52,13 +52,13 @@ export function MedicineCodeManager({ db, userId, canManage }: MedicineCodeManag
   }
 
   async function remove(item: MedicineCode) {
-    if (!window.confirm(`Delete code ${item.code}? Existing prescriptions keep the code, but the lookup mapping will be removed.`)) {
+    if (!window.confirm(`Archive code ${item.code}? Existing prescriptions keep the code, but it will stop appearing in new prescriptions, but the historical lookup will remain.`)) {
       return;
     }
 
     try {
       await removeMedicineCode(db, item.code);
-      setMessage(`${item.code} removed from the lookup registry.`);
+      setMessage(`${item.code} archived. Historical lookup remains available.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not remove medicine code.');
     }
@@ -115,10 +115,10 @@ export function MedicineCodeManager({ db, userId, canManage }: MedicineCodeManag
       <div className="medicine-code-list">
         {filteredCodes.map((item) => (
           <article className="medicine-code-row" key={item.id}>
-            <div className="medicine-code-badge">{item.code}</div>
+            <div className={`medicine-code-badge ${item.active ? '' : 'archived'}`}>{item.code}</div>
             <div>
               <strong>{item.remedyName}</strong>
-              <span>{item.notes || 'Internal medicine mapping'}</span>
+              <span>{item.active ? (item.notes || 'Internal medicine mapping') : `Archived · ${item.notes || 'historical mapping'}`}</span>
             </div>
             {canManage ? (
               <button className="button danger-text" type="button" onClick={() => remove(item)}>
