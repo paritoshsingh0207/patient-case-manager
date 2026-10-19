@@ -69,6 +69,7 @@ export const createDoctor = onCall(async (request) => {
     const setupLink = await auth.generatePasswordResetLink(email);
     return { uid: userRecord.uid, setupLink };
   } catch (error) {
+    await db.doc(`users/${userRecord.uid}`).delete().catch(() => undefined);
     await auth.deleteUser(userRecord.uid).catch(() => undefined);
     throw new HttpsError(
       'internal',
@@ -114,8 +115,8 @@ export const removeDoctor = onCall(async (request) => {
   try {
     await auth.deleteUser(uid);
   } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-    if (!message.includes('user-not-found')) {
+    const code = (error as { code?: string }).code;
+    if (code !== 'auth/user-not-found') {
       throw new HttpsError('internal', 'Patient access was revoked, but Authentication cleanup failed.');
     }
   }
