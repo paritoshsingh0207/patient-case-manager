@@ -9,3 +9,5 @@ firestore-debug.log
 ui-debug.log
 .DS_Store
 coverage/
+functions/node_modules/
+functions/lib/
