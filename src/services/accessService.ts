@@ -16,10 +16,17 @@ export function subscribePractitionerAccess(
       }
 
       const data = snapshot.data();
+      const role =
+        data.role === 'admin'
+          ? 'admin'
+          : data.role === 'doctor' || data.role === 'practitioner'
+            ? 'doctor'
+            : 'unknown';
+
       onChange({
         uid: snapshot.id,
         active: data.active === true,
-        role: data.role === 'admin' ? 'admin' : data.role === 'practitioner' ? 'practitioner' : 'unknown',
+        role,
         displayName: typeof data.displayName === 'string' ? data.displayName : undefined,
         email: typeof data.email === 'string' ? data.email : undefined,
       });
@@ -29,8 +36,5 @@ export function subscribePractitionerAccess(
 }
 
 export function hasWorkspaceAccess(profile: PractitionerAccess | null) {
-  return Boolean(
-    profile?.active &&
-    (profile.role === 'practitioner' || profile.role === 'admin')
-  );
+  return Boolean(profile?.active && (profile.role === 'doctor' || profile.role === 'admin'));
 }
