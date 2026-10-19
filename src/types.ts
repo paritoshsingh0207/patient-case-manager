@@ -56,6 +56,7 @@ export interface PatientInput {
 export interface CaseRecord {
   id: string;
   createdBy: string;
+  createdByName?: string;
   patientId: string;
   consultationDate: string;
   chiefComplaint: string;
@@ -73,7 +74,7 @@ export interface CaseRecord {
   updatedAt?: Date;
 }
 
-export type CaseInput = Omit<CaseRecord, 'id' | 'createdBy' | 'patientId' | 'createdAt' | 'updatedAt'>;
+export type CaseInput = Omit<CaseRecord, 'id' | 'createdBy' | 'createdByName' | 'patientId' | 'createdAt' | 'updatedAt'>;
 
 export interface RemedySuggestion {
   remedy: string;
