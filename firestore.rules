@@ -46,7 +46,8 @@ service cloud.firestore {
     }
 
     function childBelongsToCaller(patientId) {
-      return canAccessPatient(patientId)
+      return isDoctor()
+        && canAccessPatient(patientId)
         && request.resource.data.patientId == patientId
         && request.resource.data.createdBy == request.auth.uid;
     }
