@@ -190,7 +190,7 @@ export default function App() {
 
   async function addCase(input: CaseInput) {
     if (!selectedPatient || !isDoctor) return;
-    await createCase(activeDb, selectedPatient.id, user.uid, input);
+    await createCase(activeDb, selectedPatient.id, user.uid, practitionerName, input);
   }
 
   async function persistSuggestion(input: CaseInput, result: SuggestionResult) {
@@ -474,6 +474,7 @@ function CaseTimeline({ cases }: { cases: CaseRecord[] }) {
               <span>View details</span>
             </summary>
             <div className="case-history-details">
+              {record.createdByName ? <p><b>Recorded by:</b> {record.createdByName}</p> : null}
               {record.duration ? <p><b>Duration:</b> {record.duration}</p> : null}
               {record.location ? <p><b>Location:</b> {record.location}</p> : null}
               {record.sensation ? <p><b>Sensation:</b> {record.sensation}</p> : null}
