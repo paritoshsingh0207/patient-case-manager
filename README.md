@@ -1,90 +1,217 @@
 # Patient Case Manager
 
-Firebase-ready patient case management workspace with a restricted practitioner login and an embedded homeopathy remedy-review module.
+Firebase-ready patient case management for a clinic with role-based doctor access, administrator-controlled patient sharing, coded homeopathic prescriptions, and an internal medicine-code registry.
 
-## Security posture
+## Access model
 
-The application has no public registration flow. Signing in is only the first gate: a Firebase Authentication account must also have an active practitioner authorization document before any patient data can be read or written.
+There are two application roles:
+
+- **Admin**
+  - can see every patient and the complete case/prescription history;
+  - can add and remove doctors;
+  - can decide which doctors may see each patient;
+  - can create patients;
+  - can create/archive medicine-code mappings;
+  - cannot author a clinical case note or prescription.
+- **Doctor**
+  - sees only patients whose `doctorIds` list contains that doctor's Firebase UID;
+  - can read the complete history of an assigned patient;
+  - can add their own case notes and coded prescriptions;
+  - cannot change the patient's care team;
+  - can look up internal medicine codes.
+
+Removing a doctor deletes the Firebase Authentication login, marks the internal user profile inactive/deleted for audit history, and removes the doctor's UID from all patient care teams. Existing medical records keep their original author identity.
+
+## Architecture
 
 ```mermaid
-flowchart LR
-    Browser["Practitioner browser"] --> Login["Firebase Authentication\nEmail + password"]
-    Login --> Gate{"users/{uid}\nactive + role?"}
-    Gate -- No --> Denied["Access denied\nNo clinical data"]
-    Gate -- Yes --> UI["React clinical workspace"]
-    UI --> Rules["Firestore / Storage\nSecurity Rules"]
-    Rules --> Patient["Owner-scoped\npatient records"]
-    Rules --> Files["Owner-scoped\nPDF/image attachments"]
-    UI --> Engine["Local remedy\ndecision-support engine"]
-    AppCheck["Firebase App Check\nreCAPTCHA Enterprise"] -. production protection .-> Rules
+flowchart TD
+    Device["Admin / Doctor browser"] --> Hosting["Firebase Hosting\nReact + TypeScript"]
+    Hosting --> Auth["Firebase Authentication"]
+    Auth --> Profile{"users/{uid}\nactive + role"}
+
+    Profile -- invalid --> Denied["Access denied"]
+    Profile -- admin --> AdminUI["Admin workspace"]
+    Profile -- doctor --> DoctorUI["Doctor workspace"]
+
+    AdminUI --> AdminFns["Callable Cloud Functions\nFirebase Admin SDK"]
+    AdminFns --> AuthAdmin["Create / delete doctor login"]
+    AdminFns --> Assign["Set patients/{id}.doctorIds"]
+
+    AdminUI --> AllPatients["All patients + histories"]
+    DoctorUI --> AssignedQuery["patients where doctorIds\narray-contains doctor UID"]
+
+    AssignedQuery --> Patient["Patient A"]
+    AllPatients --> Patient
+
+    Patient --> Cases["cases/*"]
+    Patient --> Prescriptions["prescriptions/*"]
+    Patient --> Suggestions["suggestions/*"]
+    Patient --> Followups["followUps/*"]
+
+    AdminUI --> Codes["medicineCodes/{code}"]
+    DoctorUI --> Codes
+
+    Codes --> Internal["B1 → Belladonna\ninternal only"]
+    Prescriptions --> PatientCopy["Printed prescription\nB1 + directions only"]
+
+    Rules["Firestore / Storage Rules"] --> Patient
+    Rules --> Codes
+    AppCheck["Firebase App Check"] -. production attestation .-> Rules
 ```
 
-### Authorization document
+### Example: Patient A
 
-For every designated practitioner, create a Firestore document at:
+If Patient A is assigned only to Doctor Saurabh:
 
 ```text
-users/{AUTH_UID}
+patients/patient-a
+  doctorIds:
+    - <SAURABH_UID>
 ```
 
-with:
+- Admin: can see Patient A and all history.
+- Doctor Saurabh: can see Patient A and all history.
+- Doctor Gaurav: cannot read Patient A or any nested case/prescription.
+- Admin adds Gaurav's UID to `doctorIds`: Gaurav can now see the full history.
+- Saurabh and Gaurav cannot edit `doctorIds` themselves.
+
+Firestore Security Rules enforce the same behavior even if somebody bypasses the React UI and calls Firestore directly.
+
+## Prescription-code model
+
+Medicine names live in the internal registry:
+
+```text
+medicineCodes/B1
+  code: "B1"
+  remedyName: "Belladonna"
+  active: true
+```
+
+A prescription stores the code, not the remedy name:
+
+```text
+patients/{patientId}/prescriptions/{prescriptionId}
+  createdBy: <DOCTOR_UID>
+  issuedByName: "Dr Saurabh"
+  issuedAt: "2026-10-19"
+  items:
+    - code: "B1"
+      directions: "4 pills twice daily"
+      quantity: "7 days"
+```
+
+The doctor sees **B1 — Belladonna** while composing the prescription. The print stylesheet hides the application UI and prints only:
+
+- patient identity;
+- prescription date/reference;
+- medicine code;
+- patient-visible directions;
+- quantity/duration;
+- patient instructions;
+- prescriber name.
+
+Medicine codes are **archived rather than deleted**. An archived code stops appearing in new prescriptions, but its historical code-to-medicine lookup remains available.
+
+## Bootstrap the first admin
+
+The first admin is provisioned once in Firebase Console.
+
+1. Create the admin in **Authentication → Users**.
+2. Copy the Firebase Authentication UID.
+3. Create `users/{ADMIN_UID}` in Firestore:
 
 ```text
 active: true
-role: "practitioner"   # or "admin"
-displayName: "Dr Example"
-email: "doctor@example.com"
+role: "admin"
+displayName: "Clinic Administrator"
+email: "admin@clinic.example"
 ```
 
-Clients may read their own authorization document but cannot create or modify it. Patient data requires both authentication and an active `practitioner` or `admin` profile in Security Rules.
+After that, the Admin workspace can create/remove doctor accounts.
 
-## Provision a practitioner
+Legacy `role: "practitioner"` profiles are treated as doctors for compatibility, but new accounts use `role: "doctor"`.
 
-1. In **Firebase Console → Authentication → Users**, create the practitioner account.
-2. Copy the user's Firebase Authentication **UID**.
-3. In **Firestore**, create `users/{UID}`.
-4. Set `active: true` and `role: "practitioner"` (or `"admin"`).
-5. To revoke access immediately, set `active: false` or disable/delete the Authentication account.
+## Adding a doctor
 
-The web UI deliberately has no **Create account** button. A user who somehow creates/authenticates an unapproved Firebase account still cannot enter the workspace or access clinical data because authorization is enforced by Firestore/Storage rules.
+Admin → **Doctors**:
 
-For environments that require preventing unauthorized account creation at the Authentication service itself, Firebase Authentication with Identity Platform supports auth blocking functions. The data authorization rules in this repository remain required even when blocking functions are used.
+1. Enter the doctor's name and email.
+2. The callable `createDoctor` function creates the Firebase Authentication account.
+3. It creates `users/{doctorUid}` with:
+   - `active: true`
+   - `role: "doctor"`
+4. It returns a password-setup link.
+5. Send that link to the doctor through a trusted channel.
+6. Use **Patient sharing** to assign one or more patients.
 
-## What is included
+The client cannot create or modify role documents directly; only the server-side Admin SDK functions can provision doctor accounts.
 
-- Sign-in-only practitioner login
-- Firebase Email/Password authentication
-- Active practitioner/admin authorization gate
-- Owner-scoped Cloud Firestore patient records
-- Structured patient demographics and clinical history
-- Longitudinal consultation/case timeline
-- Characteristic symptom capture: location, sensation, modalities, and concomitants
-- Transparent traditional homeopathy pattern matching with matched-characteristic explanations
-- Emergency red-flag blocking before remedy ranking
-- Responsive glassmorphic UI for desktop, tablet, and mobile
-- Browser fallback when backdrop blur is unavailable
-- Firebase Hosting SPA configuration and response security headers
-- Firestore and Storage Security Rules
-- Optional Firebase App Check / reCAPTCHA Enterprise initialization
-- Unit tests for the remedy engine
-- Firestore Security Rules emulator tests
-- GitHub Actions CI for tests and production build
+## Removing a doctor
 
-> The remedy module is practitioner decision support, not a diagnosis or prescription. It intentionally does not provide potency or dosing instructions. Homeopathy has not been shown to be an effective treatment for medical conditions beyond placebo; conventional evaluation and treatment should not be delayed, especially for urgent symptoms.
+Admin → **Doctors → Remove** calls the `removeDoctor` function. It:
 
-## Local setup
+1. removes the UID from every `patients/{id}.doctorIds` array;
+2. deletes the Firebase Authentication user;
+3. retains the Firestore user record as an inactive audit tombstone;
+4. leaves historical case/prescription authorship untouched.
 
-Prerequisites: Node.js 22+, npm, and Java 21+ for Firestore emulator tests.
+## Patient data model
+
+```text
+users/{uid}
+  active
+  role: admin | doctor
+  displayName
+  email
+
+patients/{patientId}
+  createdBy
+  doctorIds[]
+  demographics/history...
+
+patients/{patientId}/cases/{caseId}
+  patientId
+  createdBy
+  createdByName
+  structured consultation fields...
+
+patients/{patientId}/prescriptions/{prescriptionId}
+  patientId
+  createdBy
+  issuedByName
+  issuedAt
+  items[]            # code + directions + quantity, no remedy name
+  patientInstructions
+
+patients/{patientId}/suggestions/{suggestionId}
+patients/{patientId}/followUps/{followUpId}
+
+medicineCodes/{CODE}
+  code
+  remedyName
+  active
+  notes
+```
+
+## Local development
+
+Prerequisites:
+
+- Node.js 22+
+- npm
+- Java 21+ for Firestore emulator rule tests
+
+Install both the web app and Functions dependencies:
 
 ```bash
-git checkout main
-git pull origin main
 npm install
+npm --prefix functions install
 cp .env.example .env.local
-npm run dev
 ```
 
-Create a Firebase Web App and place its public configuration in `.env.local`:
+Configure `.env.local` with the Firebase Web App configuration:
 
 ```dotenv
 VITE_FIREBASE_API_KEY=...
@@ -94,109 +221,70 @@ VITE_FIREBASE_STORAGE_BUCKET=...
 VITE_FIREBASE_MESSAGING_SENDER_ID=...
 VITE_FIREBASE_APP_ID=...
 
-# Keep empty for normal localhost development unless you specifically configure App Check debugging.
+# Leave blank for ordinary local development until App Check is configured.
 VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=
 ```
 
-Before testing the new authorization gate against a real Firebase development project, deploy the updated rules:
+Start the Vite app:
+
+```bash
+npm run dev
+```
+
+For Admin doctor-management actions, either deploy the callable functions to your development Firebase project or connect the client to the Functions emulator in a dedicated emulator-development configuration.
+
+## Deploy Firebase resources
+
+Cloud Functions production deployment requires a Firebase project on the Blaze plan.
 
 ```bash
 npx firebase-tools login
 npx firebase-tools use --add
-npx firebase-tools deploy --only firestore:rules,storage
+
+npm install
+npm --prefix functions install
+npm run build:all
+
+npx firebase-tools deploy --only hosting,firestore,storage,functions
 ```
 
-Then provision a practitioner using the steps above and open the Vite URL, normally `http://localhost:5173`.
+The callable functions use authenticated Firebase callable requests and verify that the caller's `users/{uid}` profile is an active admin before performing privileged user-management or patient-sharing operations.
 
-## Firebase configuration
-
-In Firebase Console:
-
-1. Enable **Authentication → Sign-in method → Email/Password**.
-2. Create the **Cloud Firestore** database.
-3. Create/enable **Cloud Storage** if attachments will be used.
-4. Add the Hosting production domain under Authentication authorized domains.
-5. Provision designated users in Authentication and `users/{uid}`.
-6. For production, configure **App Check with reCAPTCHA Enterprise**, set `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY`, validate metrics, and then enable App Check enforcement.
-
-Do not put Firebase Admin credentials, service-account JSON, or private keys into Vite environment variables. Firebase Web App configuration is public configuration; authorization is enforced by Authentication, App Check, and Security Rules.
-
-## Test and build
+## Tests
 
 ```bash
 npm test
 npm run test:rules
 npm run build
+npm run build:functions
 ```
 
-`npm run test:rules` starts the Firestore emulator against a demo project ID and does not touch production data.
+The Firestore emulator suite covers the required clinic scenarios:
 
-The rule test suite verifies:
+- unprovisioned/inactive users are denied;
+- a doctor can read their own profile but not other user profiles;
+- Doctor Saurabh can see Patient A when assigned;
+- Doctor Gaurav cannot see Patient A when unassigned;
+- Admin can see every patient and case history;
+- Admin can share Patient A with Gaurav;
+- a doctor cannot share a patient themselves;
+- assigned doctors can author clinical records;
+- admins can read but cannot author doctor case notes/prescriptions;
+- an unassigned doctor cannot read a coded prescription;
+- only admin can change the internal medicine-code registry;
+- a newly shared doctor cannot rewrite another doctor's historical case note.
 
-- approved practitioners can access their own patient data;
-- authenticated but unprovisioned accounts are denied;
-- inactive practitioners are denied;
-- clients cannot grant themselves a role;
-- practitioners cannot read another practitioner's patient record;
-- anonymous access is denied;
-- nested case ownership is enforced;
-- patient ownership cannot be transferred by the client.
+## Security notes
 
-## Firestore model
+- The login page has no public registration flow.
+- Authentication is not treated as authorization: Firestore rules independently verify role and patient assignment.
+- Admin privilege for doctor lifecycle operations is verified again inside Cloud Functions.
+- Clinical histories are patient-scoped and care-team-scoped.
+- Medicine names are not copied into patient prescription documents.
+- Cloud Storage paths are patient-scoped; assigned doctors can access patient attachments, while upload/delete ownership is constrained.
+- Firebase Hosting sends clickjacking/content-type/referrer/permissions headers.
+- App Check / reCAPTCHA Enterprise can be enabled for production.
 
-```text
-users/{uid}
-  active
-  role
-  displayName
-  email
+Before real patient data is stored, complete the applicable privacy/health-data compliance review, define audit-retention and backup policies, enable production monitoring, configure App Check enforcement after observing metrics, and consider MFA for privileged accounts.
 
-patients/{patientId}
-  ownerId
-  demographics/history...
-
-patients/{patientId}/cases/{caseId}
-  ownerId
-  structured consultation fields...
-
-patients/{patientId}/suggestions/{suggestionId}
-  ownerId
-  caseInput
-  suggestions[]
-  redFlags[]
-  engineVersion
-
-patients/{patientId}/followUps/{followUpId}
-patients/{patientId}/prescriptions/{prescriptionId}
-```
-
-All clinical data is owner-scoped. Frontend queries constrain patients by `ownerId`, and Security Rules independently enforce the same ownership and practitioner-approval requirements.
-
-## Firebase deployment
-
-```bash
-npm run build
-npx firebase-tools deploy
-```
-
-`firebase.json` deploys `dist/` through Firebase Hosting, rewrites SPA routes to `index.html`, adds clickjacking/content-type/referrer/permissions headers, disables caching for `index.html`, and gives hashed assets long-lived caching.
-
-### GitHub Actions deployment
-
-`.github/workflows/firebase-deploy.yml` provides a manual **Deploy Firebase** workflow.
-
-Configure repository variables:
-
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_STORAGE_BUCKET`
-- `VITE_FIREBASE_MESSAGING_SENDER_ID`
-- `VITE_FIREBASE_APP_ID`
-- `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` (production App Check; optional until configured)
-
-Add `FIREBASE_SERVICE_ACCOUNT` as a GitHub Actions secret containing a deployment service-account JSON credential with only the permissions required to deploy the enabled Firebase resources.
-
-## Recommended production hardening
-
-Before storing real patient data, complete a jurisdiction-specific privacy/compliance review and add operational controls such as audit logging, backup/retention policy, account lifecycle procedures, monitoring, and—where appropriate—multi-factor authentication. App Check helps reject requests from unauthorized clients, but it complements rather than replaces Authentication and Security Rules.
+> The remedy module is practitioner decision support, not a diagnosis or prescription. It does not validate homeopathy as effective treatment for disease, and conventional medical evaluation should not be delayed for urgent symptoms.
