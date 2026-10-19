@@ -1,15 +1,45 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function isDesignatedPractitioner() {
+    function hasProfile() {
       return request.auth != null
-        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true
-        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['practitioner', 'admin'];
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid));
     }
 
-    function ownsPath(userId) {
-      return isDesignatedPractitioner() && request.auth.uid == userId;
+    function profile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActiveMember() {
+      return hasProfile()
+        && profile().active == true
+        && profile().role in ['admin', 'doctor', 'practitioner'];
+    }
+
+    function isAdmin() {
+      return isActiveMember() && profile().role == 'admin';
+    }
+
+    function isDoctor() {
+      return isActiveMember() && profile().role in ['doctor', 'practitioner'];
+    }
+
+    function patientExists(patientId) {
+      return firestore.exists(/databases/(default)/documents/patients/$(patientId));
+    }
+
+    function canAccessPatient(patientId) {
+      return isActiveMember()
+        && patientExists(patientId)
+        && (
+          isAdmin()
+          || (
+            isDoctor()
+            && request.auth.uid in firestore.get(
+              /databases/(default)/documents/patients/$(patientId)
+            ).data.doctorIds
+          )
+        );
     }
 
     function allowedAttachment() {
@@ -21,10 +51,18 @@ service firebase.storage {
         );
     }
 
-    match /users/{userId}/patients/{patientId}/{allPaths=**} {
-      allow read: if ownsPath(userId);
-      allow create, update: if ownsPath(userId) && allowedAttachment();
-      allow delete: if ownsPath(userId);
+    match /patients/{patientId}/users/{uploaderId}/{allPaths=**} {
+      allow read: if canAccessPatient(patientId);
+      allow create, update: if isDoctor()
+        && canAccessPatient(patientId)
+        && request.auth.uid == uploaderId
+        && allowedAttachment();
+      allow delete: if isAdmin()
+        || (
+          isDoctor()
+          && canAccessPatient(patientId)
+          && request.auth.uid == uploaderId
+        );
     }
 
     match /{allPaths=**} {
