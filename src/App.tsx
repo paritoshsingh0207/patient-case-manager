@@ -182,10 +182,6 @@ export default function App() {
   const isAdmin = accessProfile.role === 'admin';
   const isDoctor = accessProfile.role === 'doctor';
 
-  if (!isAdmin && activeView === 'admin') {
-    setActiveView('patients');
-  }
-
   async function addPatient(input: PatientInput) {
     const result = await createPatient(activeDb, user.uid, accessProfile.role, input);
     setSelectedPatientId(result.id);
