@@ -1,9 +1,9 @@
-import { initializeApp } from 'firebase-admin/app';
+import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
-initializeApp();
+if (!getApps().length) initializeApp();
 
 const db = getFirestore();
 const auth = getAuth();
@@ -186,3 +186,5 @@ export const setPatientDoctors = onCall(async (request) => {
 
   return { updated: true };
 });
+
+export { importVerifiedMedicines, registerMedicineCode, archiveMedicineCode, createCodedPrescription } from './medicine.js';
