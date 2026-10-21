@@ -36,7 +36,7 @@ function requireString(value: unknown, field: string, maxLength: number) {
   return normalized;
 }
 
-export const createDoctor = onCall(async (request) => {
+export const createDoctor = onCall({ enforceAppCheck: true }, async (request) => {
   const admin = await requireAdmin(request.auth?.uid);
   const email = requireString(request.data?.email, 'Email', 254).toLowerCase();
   const displayName = requireString(request.data?.displayName, 'Display name', 120);
@@ -78,7 +78,7 @@ export const createDoctor = onCall(async (request) => {
   }
 });
 
-export const removeDoctor = onCall(async (request) => {
+export const removeDoctor = onCall({ enforceAppCheck: true }, async (request) => {
   const admin = await requireAdmin(request.auth?.uid);
   const uid = requireString(request.data?.uid, 'Doctor UID', 128);
 
@@ -134,7 +134,7 @@ export const removeDoctor = onCall(async (request) => {
   return { removed: true, patientsUpdated: docs.length };
 });
 
-export const setPatientDoctors = onCall(async (request) => {
+export const setPatientDoctors = onCall({ enforceAppCheck: true }, async (request) => {
   const admin = await requireAdmin(request.auth?.uid);
   const patientId = requireString(request.data?.patientId, 'Patient ID', 128);
   const rawDoctorIds = request.data?.doctorIds;

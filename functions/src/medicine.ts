@@ -58,7 +58,7 @@ function validateMedicine(raw: unknown) {
 
 // 881-entry bulk import: validate all mappings before writing any. Safe to retry.
 export const importVerifiedMedicines = onCall(
-  { timeoutSeconds: 180, memory: '512MiB' },
+  { timeoutSeconds: 180, memory: '512MiB', enforceAppCheck: true },
   async (request) => {
     const admin = await activeProfile(request.auth?.uid);
     if (request.data?.clinicalUseApproved !== true) {
@@ -161,7 +161,7 @@ export const importVerifiedMedicines = onCall(
 );
 
 // Single newly reviewed entries never overwrite a previously issued code.
-export const registerMedicineCode = onCall(async (request) => {
+export const registerMedicineCode = onCall({ enforceAppCheck: true }, async (request) => {
   const admin = await activeProfile(request.auth?.uid);
   if (request.data?.expertVerified !== true || request.data?.clinicalUseApproved !== true) {
     throw new HttpsError('failed-precondition', 'Expert and clinical approval must be confirmed.');
@@ -186,7 +186,7 @@ export const registerMedicineCode = onCall(async (request) => {
   return { code: item.code };
 });
 
-export const archiveMedicineCode = onCall(async (request) => {
+export const archiveMedicineCode = onCall({ enforceAppCheck: true }, async (request) => {
   const admin = await activeProfile(request.auth?.uid);
   const code = mandatory(request.data?.code, 'Code', 24).toUpperCase();
   const ref = db.doc('medicineCodes/' + code);
@@ -199,7 +199,7 @@ export const archiveMedicineCode = onCall(async (request) => {
 });
 
 // A doctor cannot circumvent approved-code checks using direct Firestore writes.
-export const createCodedPrescription = onCall(async (request) => {
+export const createCodedPrescription = onCall({ enforceAppCheck: true }, async (request) => {
   const doctor = await activeProfile(request.auth?.uid, false);
   const patientId = mandatory(request.data?.patientId, 'Patient ID', 128);
   const patient = (await db.doc('patients/' + patientId).get()).data();
@@ -252,7 +252,7 @@ export const createCodedPrescription = onCall(async (request) => {
 
 
 /** Void a prescription without erasing the medical record or its signed authorship. */
-export const voidCodedPrescription = onCall(async (request) => {
+export const voidCodedPrescription = onCall({ enforceAppCheck: true }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Sign in is required.');
   const profile = (await db.doc('users/' + uid).get()).data();

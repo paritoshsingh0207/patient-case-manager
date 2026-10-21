@@ -340,3 +340,5 @@ medicine quality, storage and record-retention checks before production.
 Before serving clinical patient data, complete every gate in [PRODUCTION_RELEASE.md](PRODUCTION_RELEASE.md). Run the legacy-patient audit **before** deploying the new Firestore rules; deploy from main only through the manually confirmed protected production workflow.
 
 **New prescriptions** require the medicine's approved code, potency/strength, dosage form and directions. Earlier historical prescriptions without these newer fields remain readable. Dosage confirmation is the responsibility of the prescribing professional; the app does not calculate or validate therapeutic doses or adverse interactions.
+
+Production callable functions enforce Firebase App Check. Provision a reCAPTCHA Enterprise site key, register the application and hosting domain, and set `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` before the production deployment; missing/invalid tokens are refused. Configure Firestore and Cloud Storage App Check enforcement separately in the Firebase console after observing impact in staging.

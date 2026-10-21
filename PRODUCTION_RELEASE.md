@@ -19,6 +19,10 @@ clinical/dispensing checks, backups, and release approval are required prior to 
    initial authorized admin profile; prevent public account provisioning. Configure MFA for
    admins/clinicians wherever available; configure account recovery and offboarding tests.
    Use the supported Firebase project plan for Cloud Functions (typically Blaze).
+   Configure reCAPTCHA Enterprise App Check for the Firebase Web App and authorize the
+   hosting domain. The protected deployment workflow requires a nonblank
+   VITE_RECAPTCHA_ENTERPRISE_SITE_KEY and callables reject requests without valid App Check
+   tokens. Validate staging with correctly configured App Check before promoting.
 3. **Backup and migration before security-rule deployment.** Export a protected point-in-time
    Firestore backup and ensure restore is tested. With appropriate ADC read access, run:
    `node functions/scripts/audit-legacy-patients.cjs --project=YOUR_PROJECT_ID`
