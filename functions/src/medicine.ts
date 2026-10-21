@@ -221,7 +221,9 @@ export const createCodedPrescription = onCall(async (request) => {
       throw new HttpsError('invalid-argument', 'Use an alphabetical medicine code.');
     }
     return {
-      code, directions: mandatory(item?.directions, 'Directions', 500),
+      code, potency: mandatory(item?.potency, 'Potency', 40),
+      dosageForm: mandatory(item?.dosageForm, 'Dosage form', 70),
+      directions: mandatory(item?.directions, 'Directions', 500),
       quantity: optional(item?.quantity, 200),
     };
   });

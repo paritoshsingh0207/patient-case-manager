@@ -15,6 +15,8 @@ function prescriptionFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>, pati
     .filter((item:unknown)=>item&&typeof item==='object')
     .map((item:Record<string,unknown>)=>({
       code:typeof item.code==='string'?item.code:'',
+      potency:typeof item.potency==='string'?item.potency:undefined,
+      dosageForm:typeof item.dosageForm==='string'?item.dosageForm:undefined,
       directions:typeof item.directions==='string'?item.directions:'',
       quantity:typeof item.quantity==='string'?item.quantity:undefined,
     })).filter((item:PrescriptionItem)=>item.code):[];
@@ -31,8 +33,8 @@ export function subscribePrescriptions(db:Firestore,patientId:string,onChange:(r
   },onError);
 }
 export async function createPrescription(functions:Functions,input:{patientId:string;issuedAt:string;items:PrescriptionItem[];patientInstructions?:string;clinicalReviewConfirmed:boolean}){
-  const items=input.items.map(item=>({code:normalizeMedicineCode(item.code),directions:item.directions.trim(),quantity:item.quantity?.trim()??''}));
-  if(!items.length||items.some(item=>!item.code||!item.directions))throw Error('Each medicine needs an approved code and directions.');
+  const items=input.items.map(item=>({code:normalizeMedicineCode(item.code),potency:item.potency?.trim()??'',dosageForm:item.dosageForm?.trim()??'',directions:item.directions.trim(),quantity:item.quantity?.trim()??''}));
+  if(!items.length||items.some(item=>!item.code||!item.directions||!item.potency||!item.dosageForm))throw Error('Each medicine needs an approved code, potency, dosage form and directions.');
   const callable=httpsCallable<typeof input,{id:string}>(functions,'createCodedPrescription');
   return (await callable({...input,items})).data;
 }

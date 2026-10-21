@@ -2526,3 +2526,9 @@ label {
 .prescription-history-row {grid-template-columns:minmax(0,1fr) auto auto auto}
 .prescription-history-row span {white-space:normal!important;overflow-wrap:anywhere}
 @media(max-width:720px){.prescription-history-row {grid-template-columns:1fr auto;}}
+
+/* Coded Rx retains practical potency and form identification for dispensing. */
+.prescription-item-editor {grid-template-columns:repeat(3,minmax(0,1fr));align-items:end}
+.prescription-item-editor .compact-button {justify-self:start}
+.rx-dispensary-detail {display:block;font-size:10px;line-height:1.5;color:inherit}
+@media(max-width:720px){.prescription-item-editor {grid-template-columns:1fr}}

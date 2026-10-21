@@ -25,7 +25,7 @@ function localDate() {
 }
 
 function emptyItem(): PrescriptionItem {
-  return { code: '', directions: '', quantity: '' };
+  return { code: '', potency: '', dosageForm: '', directions: '', quantity: '' };
 }
 
 export function PrescriptionPanel({
@@ -175,6 +175,14 @@ export function PrescriptionPanel({
                       {remedyName ? <small className="internal-remedy-hint">Internal: {remedyName}</small> : null}
                     </label>
                     <label>
+                      Potency / strength
+                      <input required maxLength={40} value={item.potency ?? ''} onChange={(event) => updateItem(index, 'potency', event.target.value)} placeholder="e.g. 30C, 200C, Q" />
+                    </label>
+                    <label>
+                      Dosage form
+                      <input required maxLength={70} value={item.dosageForm ?? ''} onChange={(event) => updateItem(index, 'dosageForm', event.target.value)} placeholder="e.g. globules, drops" />
+                    </label>
+                    <label>
                       Directions visible to patient
                       <input
                         required
@@ -256,7 +264,7 @@ export function PrescriptionPanel({
             <article className="prescription-history-row" key={record.id}>
               <div>
                 <strong>{record.issuedAt} {record.voidedAt ? ' · VOIDED' : ''}</strong>
-                <span>{record.items.map((item) => item.code + (internalName(item.code) ? ' — ' + internalName(item.code) : ' — needs verification')).join(', ')}</span>
+                <span>{record.items.map((item) => item.code + (internalName(item.code) ? ' — ' + internalName(item.code) : ' — needs verification') + (item.potency ? ' · ' + item.potency : '') + (item.dosageForm ? ' · ' + item.dosageForm : '')).join(', ')}</span>
                 {record.voidedAt ? <span>Void reason: {record.voidReason || 'Not specified'}</span> : null}
               </div>
               <span className="quiet-note">By {record.issuedByName}</span>
@@ -297,7 +305,7 @@ export function PrescriptionPanel({
             <tbody>
               {printable.items.map((item, index) => (
                 <tr key={`${item.code}-${index}`}>
-                  <td><strong>{item.code}</strong></td>
+                  <td><strong>{item.code}</strong>{item.potency ? <span className="rx-dispensary-detail">{item.potency}</span> : null}{item.dosageForm ? <span className="rx-dispensary-detail">{item.dosageForm}</span> : null}</td>
                   <td>{item.directions}</td>
                   <td>{item.quantity || '—'}</td>
                 </tr>

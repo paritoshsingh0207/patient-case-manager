@@ -338,3 +338,5 @@ medicine quality, storage and record-retention checks before production.
 ## Production rollout
 
 Before serving clinical patient data, complete every gate in [PRODUCTION_RELEASE.md](PRODUCTION_RELEASE.md). Run the legacy-patient audit **before** deploying the new Firestore rules; deploy from main only through the manually confirmed protected production workflow.
+
+**New prescriptions** require the medicine's approved code, potency/strength, dosage form and directions. Earlier historical prescriptions without these newer fields remain readable. Dosage confirmation is the responsibility of the prescribing professional; the app does not calculate or validate therapeutic doses or adverse interactions.

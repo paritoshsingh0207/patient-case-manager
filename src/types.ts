@@ -113,6 +113,8 @@ export interface MedicineCode {
 
 export interface PrescriptionItem {
   code: string;
+  potency?: string;
+  dosageForm?: string;
   directions: string;
   quantity?: string;
 }

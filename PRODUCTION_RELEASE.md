@@ -41,9 +41,9 @@ clinical/dispensing checks, backups, and release approval are required prior to 
    and archived medicines cannot be activated via a repeated import.
 6. **Prepare patient-safe dispensing.** Each code must resolve to an unambiguous full
    identity, potency, form, concentration, dose, directions, batch/lot as needed, and
-   all relevant label/prescription disclosures. The current editor has directions and
-   quantity/duration only; any dispensing workflow requiring additional structured details,
-   pharmacist sign-off, or medication interaction checking must be completed before go-live.
+   all relevant label/prescription disclosures. The current editor captures potency, dosage form, directions and quantity/duration;
+   dispensing workflows requiring batch/lot tracking, specific product strength,
+   pharmacy sign-off or automated interaction checking must still be completed before go-live.
    Internal code-only paper must not be the only accessible medication identification.
    Homeopathy should not delay evidence-based diagnosis and care.
 7. **Privacy and continuity.** Define user/clinic consent records, purpose limitation,
