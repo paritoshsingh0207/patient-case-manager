@@ -125,5 +125,9 @@ export interface PrescriptionRecord {
   issuedAt: string;
   items: PrescriptionItem[];
   patientInstructions?: string;
+  clinicalReviewConfirmed?: boolean;
+  voidedAt?: Date;
+  voidedBy?: string;
+  voidReason?: string;
   createdAt?: Date;
 }

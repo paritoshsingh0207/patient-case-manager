@@ -324,3 +324,12 @@ Patient-facing documents must still meet applicable disclosure, labelling and di
 The previous app release, patient sharing, and any legacy owner-scoped patient records
 must be migrated before using this version with real patient data. Complete privacy,
 medicine quality, storage and record-retention checks before production.
+
+
+### Production record integrity and fixed release
+
+- The 881-entry v1 medicine list is **fingerprint-pinned** (SHA-256 of sorted code, name and legacy mappings). Tampered or accidentally changed files are refused even if they claim the same release version.
+- The importer validates all codes before writing and rechecks each batch transactionally; archived codes cannot be reactivated by importing the release again.
+- Patient care-team assignments are only changed through the validated server callable. Admin direct Firestore changes to `doctorIds` are denied.
+- Clinical notes, prescriptions, follow-ups and suggestions are append-only from the client. Prescriptions cannot be deleted; authors/administrators may **void** with a recorded reason through a privileged callable.
+- Before prescribing, the doctor must attest that allergies, current medicines and disclosure/dispensing requirements were reviewed. This is a **manual check**, not automated drug-interaction checking.

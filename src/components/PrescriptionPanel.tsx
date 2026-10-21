@@ -5,6 +5,7 @@ import type { MedicineCode, Patient, PrescriptionItem, PrescriptionRecord } from
 import { subscribeMedicineCodes } from '../services/medicineService';
 import {
   createPrescription,
+  voidPrescription,
   subscribePrescriptions,
 } from '../services/prescriptionService';
 
@@ -42,6 +43,7 @@ export function PrescriptionPanel({
   const [patientInstructions, setPatientInstructions] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [printable, setPrintable] = useState<PrescriptionRecord | null>(null);
 
   useEffect(() => {
@@ -94,9 +96,11 @@ export function PrescriptionPanel({
         issuedAt,
         items,
         patientInstructions,
+        clinicalReviewConfirmed: reviewConfirmed,
       });
       setItems([emptyItem()]);
       setPatientInstructions('');
+      setReviewConfirmed(false);
       setMessage('Approved coded prescription saved. Clinic medicine mapping remains available for authorized verification.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not save prescription.');
@@ -106,8 +110,22 @@ export function PrescriptionPanel({
   }
 
   function printPrescription(record: PrescriptionRecord) {
+    if (record.voidedAt) return;
     setPrintable(record);
     window.setTimeout(() => window.print(), 80);
+  }
+
+  async function handleVoid(record: PrescriptionRecord) {
+    const reason = window.prompt('Why is this prescription being voided? The record and reason will be retained.');
+    if (!reason?.trim()) return;
+    if (!window.confirm('Void this prescription permanently? A replacement requires a NEW prescription.')) return;
+    try {
+      await voidPrescription(functions, {patientId: patient.id, prescriptionId: record.id, reason: reason.trim()});
+      setMessage('Prescription voided with an audit reason. Historical record retained.');
+      setPrintable(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not void the prescription.');
+    }
   }
 
   function internalName(code: string) {
@@ -202,9 +220,17 @@ export function PrescriptionPanel({
               />
             </label>
   
+            <div className="registry-review-box">
+              <strong>Clinical identity and safety review</strong>
+              <p className="quiet-note">Patient allergies: {patient.allergies || 'Not documented'} · Current medicines: {patient.currentMedications || 'Not documented'}</p>
+              <label className="registry-approval">
+                <input type="checkbox" checked={reviewConfirmed} onChange={(event) => setReviewConfirmed(event.target.checked)}/>
+                I reviewed allergies, current medicines and dispensing details and will ensure the patient can obtain the complete medicine identity.
+              </label>
+            </div>
             <div className="case-actions">
-              <span className="quiet-note">Medicine names are not stored in the prescription document.</span>
-              <button className="button primary" type="submit" disabled={saving || !activeCodes.length}>
+              <span className="quiet-note">The clinic registry retains the full medicine identity for clinical and dispensing verification.</span>
+              <button className="button primary" type="submit" disabled={saving || !activeCodes.length || !reviewConfirmed}>
                 {saving ? 'Saving…' : 'Save coded prescription'}
               </button>
             </div>
@@ -229,13 +255,15 @@ export function PrescriptionPanel({
           {prescriptions.map((record) => (
             <article className="prescription-history-row" key={record.id}>
               <div>
-                <strong>{record.issuedAt}</strong>
-                <span>{record.items.map((item) => item.code).join(', ')}</span>
+                <strong>{record.issuedAt} {record.voidedAt ? ' · VOIDED' : ''}</strong>
+                <span>{record.items.map((item) => item.code + (internalName(item.code) ? ' — ' + internalName(item.code) : ' — needs verification')).join(', ')}</span>
+                {record.voidedAt ? <span>Void reason: {record.voidReason || 'Not specified'}</span> : null}
               </div>
               <span className="quiet-note">By {record.issuedByName}</span>
-              <button className="button secondary" type="button" onClick={() => printPrescription(record)}>
-                Print
-              </button>
+              {record.voidedAt ? <span className="quiet-note">Not valid for dispensing</span> : <>
+                <button className="button secondary" type="button" onClick={() => printPrescription(record)}>Print</button>
+                {(userId === record.createdBy || !canPrescribe) ? <button className="button danger-text" type="button" onClick={() => handleVoid(record)}>Void</button> : null}
+              </>}
             </article>
           ))}
           {!prescriptions.length ? <div className="empty-list">No prescriptions saved yet.</div> : null}

@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  deleteDoc,
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
@@ -145,9 +146,15 @@ describe('clinic role and patient-sharing security rules', () => {
     await seedPatient('patient-a', ['saurabh']);
 
     const admin = testEnv.authenticatedContext('admin').firestore();
-    await assertSucceeds(updateDoc(doc(admin, 'patients/patient-a'), {
+    await assertFails(updateDoc(doc(admin, 'patients/patient-a'), {
       doctorIds: ['saurabh', 'gaurav'],
     }));
+    // Validated callable writes as Admin SDK; disabled rules simulate that route.
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await updateDoc(doc(context.firestore(), 'patients/patient-a'), {
+        doctorIds: ['saurabh', 'gaurav'],
+      });
+    });
 
     const gaurav = testEnv.authenticatedContext('gaurav').firestore();
     await assertSucceeds(getDoc(doc(gaurav, 'patients/patient-a')));
@@ -270,13 +277,38 @@ describe('clinic role and patient-sharing security rules', () => {
     await seedPatient('patient-a', ['saurabh']);
 
     const admin = testEnv.authenticatedContext('admin').firestore();
-    await assertSucceeds(updateDoc(doc(admin, 'patients/patient-a'), {
+    await assertFails(updateDoc(doc(admin, 'patients/patient-a'), {
       doctorIds: ['saurabh', 'gaurav'],
     }));
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await updateDoc(doc(context.firestore(), 'patients/patient-a'), {doctorIds: ['saurabh', 'gaurav']});
+    });
 
     const gaurav = testEnv.authenticatedContext('gaurav').firestore();
     await assertFails(updateDoc(doc(gaurav, 'patients/patient-a/cases/case-1'), {
       notes: 'Attempt to rewrite Saurabh history',
     }));
+  });
+});
+
+
+describe('production append-only clinical audit rules', () => {
+  it('blocks direct deletion or edits of signed clinical history for any role', async () => {
+    await seedUser('admin','admin'); await seedUser('saurabh','doctor');
+    await seedPatient('patient-a',['saurabh']);
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(),'patients/patient-a/prescriptions/rx-1'),{
+        patientId:'patient-a',createdBy:'saurabh',issuedAt:'2026-10-21',
+        items:[{code:'BE1',directions:'Example'}],
+      });
+    });
+    const doctor = testEnv.authenticatedContext('saurabh').firestore();
+    const admin = testEnv.authenticatedContext('admin').firestore();
+    for (const client of [doctor,admin]) {
+      await assertFails(deleteDoc(doc(client,'patients/patient-a/prescriptions/rx-1')));
+      await assertFails(updateDoc(doc(client,'patients/patient-a/prescriptions/rx-1'),{items:[]}));
+      await assertFails(deleteDoc(doc(client,'patients/patient-a/cases/case-1')));
+      await assertFails(updateDoc(doc(client,'patients/patient-a/cases/case-1'),{notes:'silent rewrite'}));
+    }
   });
 });

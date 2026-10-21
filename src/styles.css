@@ -2520,3 +2520,9 @@ label {
   .medicine-code-form {grid-template-columns:1fr;}
   .registry-import-box .button {width:100%;}
 }
+
+.registry-review-box {display:grid;gap:8px;padding:14px;border:1px solid var(--line);border-radius:14px;background:rgba(244,251,247,.72)}
+.registry-review-box p {margin:0;overflow-wrap:anywhere}
+.prescription-history-row {grid-template-columns:minmax(0,1fr) auto auto auto}
+.prescription-history-row span {white-space:normal!important;overflow-wrap:anywhere}
+@media(max-width:720px){.prescription-history-row {grid-template-columns:1fr auto;}}

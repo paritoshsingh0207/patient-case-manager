@@ -118,6 +118,7 @@ export const importVerifiedMedicines = onCall(
       const slice = entries.slice(n, n + 300);
       let batchCreated = 0, batchReapproved = 0;
       await db.runTransaction(async (tx) => {
+        batchCreated = 0; batchReapproved = 0;
         const refs = slice.map(item => db.doc('medicineCodes/' + item.code));
         const snapshots = await tx.getAll(...refs);
         for (let i = 0; i < slice.length; i++) {

@@ -19,7 +19,9 @@ function prescriptionFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>, pati
       quantity:typeof item.quantity==='string'?item.quantity:undefined,
     })).filter((item:PrescriptionItem)=>item.code):[];
   return {id:snapshot.id,patientId,createdBy:data.createdBy??'',issuedByName:data.issuedByName??'Doctor',
-    issuedAt:data.issuedAt??'',items,patientInstructions:data.patientInstructions,createdAt:toDate(data.createdAt)};
+    issuedAt:data.issuedAt??'',items,patientInstructions:data.patientInstructions,createdAt:toDate(data.createdAt),
+    clinicalReviewConfirmed:data.clinicalReviewConfirmed===true,
+    voidedAt:toDate(data.voidedAt),voidedBy:data.voidedBy,voidReason:data.voidReason};
 }
 export function subscribePrescriptions(db:Firestore,patientId:string,onChange:(records:PrescriptionRecord[])=>void,onError:(error:Error)=>void){
   return onSnapshot(collection(db,'patients',patientId,'prescriptions'),snapshot=>{
@@ -28,9 +30,14 @@ export function subscribePrescriptions(db:Firestore,patientId:string,onChange:(r
     onChange(prescriptions);
   },onError);
 }
-export async function createPrescription(functions:Functions,input:{patientId:string;issuedAt:string;items:PrescriptionItem[];patientInstructions?:string}){
+export async function createPrescription(functions:Functions,input:{patientId:string;issuedAt:string;items:PrescriptionItem[];patientInstructions?:string;clinicalReviewConfirmed:boolean}){
   const items=input.items.map(item=>({code:normalizeMedicineCode(item.code),directions:item.directions.trim(),quantity:item.quantity?.trim()??''}));
   if(!items.length||items.some(item=>!item.code||!item.directions))throw Error('Each medicine needs an approved code and directions.');
   const callable=httpsCallable<typeof input,{id:string}>(functions,'createCodedPrescription');
   return (await callable({...input,items})).data;
+}
+
+export async function voidPrescription(functions:Functions,input:{patientId:string;prescriptionId:string;reason:string}){
+  const callable=httpsCallable<typeof input,{voided:boolean}>(functions,'voidCodedPrescription');
+  return (await callable(input)).data;
 }
