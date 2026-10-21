@@ -5,59 +5,125 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function ownsPatient(patientId) {
+    function hasProfile() {
       return signedIn()
-        && exists(/databases/$(database)/documents/patients/$(patientId))
-        && get(/databases/$(database)/documents/patients/$(patientId)).data.ownerId == request.auth.uid;
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    function createsOwnedChild() {
-      return request.resource.data.ownerId == request.auth.uid;
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function preservesOwnedChild() {
-      return resource.data.ownerId == request.auth.uid
-        && request.resource.data.ownerId == request.auth.uid;
+    function isActiveMember() {
+      return hasProfile()
+        && profile().active == true
+        && profile().role in ['admin', 'doctor', 'practitioner'];
+    }
+
+    function isAdmin() {
+      return isActiveMember() && profile().role == 'admin';
+    }
+
+    function isDoctor() {
+      return isActiveMember() && profile().role in ['doctor', 'practitioner'];
+    }
+
+    function patientExists(patientId) {
+      return exists(/databases/$(database)/documents/patients/$(patientId));
+    }
+
+    function patient(patientId) {
+      return get(/databases/$(database)/documents/patients/$(patientId)).data;
+    }
+
+    function canAccessPatient(patientId) {
+      return isActiveMember()
+        && patientExists(patientId)
+        && (
+          isAdmin()
+          || (isDoctor() && request.auth.uid in patient(patientId).doctorIds)
+        );
+    }
+
+    function childBelongsToCaller(patientId) {
+      return isDoctor()
+        && canAccessPatient(patientId)
+        && request.resource.data.patientId == patientId
+        && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    function canModifyOwnChild(patientId) {
+      return canAccessPatient(patientId)
+        && resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.patientId == patientId;
+    }
+
+    match /users/{userId} {
+      allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     match /patients/{patientId} {
-      allow create: if signedIn()
-        && request.resource.data.ownerId == request.auth.uid;
+      allow create: if isAdmin()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.doctorIds is list;
 
-      allow read, delete: if signedIn()
-        && resource.data.ownerId == request.auth.uid;
+      allow create: if isDoctor()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.doctorIds == [request.auth.uid];
 
-      allow update: if signedIn()
-        && resource.data.ownerId == request.auth.uid
-        && request.resource.data.ownerId == request.auth.uid;
+      allow read: if isAdmin()
+        || (
+          isDoctor()
+          && resource.data.doctorIds is list
+          && request.auth.uid in resource.data.doctorIds
+        );
+
+      // Care-team membership changes require the server callable to validate every UID.
+      allow update: if isAdmin()
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.doctorIds == resource.data.doctorIds;
+
+      allow update: if isDoctor()
+        && request.auth.uid in resource.data.doctorIds
+        && request.resource.data.doctorIds == resource.data.doctorIds
+        && request.resource.data.createdBy == resource.data.createdBy;
+
+      allow delete: if isAdmin();
 
       match /cases/{caseId} {
-        allow read: if ownsPatient(patientId);
-        allow create: if ownsPatient(patientId) && createsOwnedChild();
-        allow update: if ownsPatient(patientId) && preservesOwnedChild();
-        allow delete: if ownsPatient(patientId) && resource.data.ownerId == request.auth.uid;
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId);
+        // Clinical notes are append-only. Corrections require a new dated entry.
+        allow update, delete: if false;
       }
 
       match /suggestions/{suggestionId} {
-        allow read: if ownsPatient(patientId);
-        allow create: if ownsPatient(patientId) && createsOwnedChild();
-        allow update: if ownsPatient(patientId) && preservesOwnedChild();
-        allow delete: if ownsPatient(patientId) && resource.data.ownerId == request.auth.uid;
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId);
+        allow update, delete: if false;
       }
 
       match /followUps/{followUpId} {
-        allow read: if ownsPatient(patientId);
-        allow create: if ownsPatient(patientId) && createsOwnedChild();
-        allow update: if ownsPatient(patientId) && preservesOwnedChild();
-        allow delete: if ownsPatient(patientId) && resource.data.ownerId == request.auth.uid;
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId);
+        allow update, delete: if false;
       }
 
       match /prescriptions/{prescriptionId} {
-        allow read: if ownsPatient(patientId);
-        allow create: if ownsPatient(patientId) && createsOwnedChild();
-        allow update: if ownsPatient(patientId) && preservesOwnedChild();
-        allow delete: if ownsPatient(patientId) && resource.data.ownerId == request.auth.uid;
+        allow read: if canAccessPatient(patientId);
+        // Server validates doctor assignment and each approved medicine code.
+        allow create, update, delete: if false;
       }
+    }
+
+    match /medicineCodes/{codeId} {
+      allow read: if isActiveMember();
+      // Mappings are immutable; privileged callable functions own all writes.
+      allow create, update: if false;
+      allow delete: if false;
     }
 
     match /{document=**} {

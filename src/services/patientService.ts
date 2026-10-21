@@ -3,28 +3,49 @@ import {
   collection,
   doc,
   onSnapshot,
+  query,
   serverTimestamp,
   type DocumentData,
   type Firestore,
   type QueryDocumentSnapshot,
   updateDoc,
   where,
-  query,
 } from 'firebase/firestore';
-import type { CaseInput, CaseRecord, Patient, PatientInput, SuggestionResult } from '../types';
+import type {
+  AppRole,
+  CaseInput,
+  CaseRecord,
+  Patient,
+  PatientInput,
+  SuggestionResult,
+} from '../types';
 
 function toDate(value: unknown): Date | undefined {
-  if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'toDate' in value &&
+    typeof (value as { toDate: () => Date }).toDate === 'function'
+  ) {
     return (value as { toDate: () => Date }).toDate();
   }
+
   return undefined;
 }
 
 function patientFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>): Patient {
   const data = snapshot.data();
+  const legacyOwner = typeof data.ownerId === 'string' ? data.ownerId : undefined;
+  const doctorIds = Array.isArray(data.doctorIds)
+    ? data.doctorIds.filter((value: unknown): value is string => typeof value === 'string')
+    : legacyOwner
+      ? [legacyOwner]
+      : [];
+
   return {
     id: snapshot.id,
-    ownerId: data.ownerId,
+    createdBy: data.createdBy ?? legacyOwner ?? '',
+    doctorIds,
     firstName: data.firstName,
     lastName: data.lastName,
     dateOfBirth: data.dateOfBirth,
@@ -44,9 +65,11 @@ function patientFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>): Patient 
 
 function caseFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>, patientId: string): CaseRecord {
   const data = snapshot.data();
+
   return {
     id: snapshot.id,
-    ownerId: data.ownerId,
+    createdBy: data.createdBy ?? data.ownerId ?? '',
+    createdByName: data.createdByName,
     patientId,
     consultationDate: data.consultationDate,
     chiefComplaint: data.chiefComplaint,
@@ -67,11 +90,17 @@ function caseFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>, patientId: s
 
 export function subscribePatients(
   db: Firestore,
-  ownerId: string,
+  userId: string,
+  role: AppRole,
   onChange: (patients: Patient[]) => void,
   onError: (error: Error) => void,
 ) {
-  const patientsQuery = query(collection(db, 'patients'), where('ownerId', '==', ownerId));
+  const patientsCollection = collection(db, 'patients');
+  const patientsQuery =
+    role === 'admin'
+      ? patientsCollection
+      : query(patientsCollection, where('doctorIds', 'array-contains', userId));
+
   return onSnapshot(
     patientsQuery,
     (snapshot) => {
@@ -86,19 +115,28 @@ export function subscribePatients(
   );
 }
 
-export async function createPatient(db: Firestore, ownerId: string, input: PatientInput) {
+export async function createPatient(
+  db: Firestore,
+  userId: string,
+  role: AppRole,
+  input: PatientInput,
+) {
   return addDoc(collection(db, 'patients'), {
     ...input,
-    ownerId,
+    createdBy: userId,
+    doctorIds: role === 'admin' ? [] : [userId],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 }
 
-export async function updatePatient(db: Firestore, patientId: string, ownerId: string, input: PatientInput) {
+export async function updatePatient(
+  db: Firestore,
+  patientId: string,
+  input: PatientInput,
+) {
   await updateDoc(doc(db, 'patients', patientId), {
     ...input,
-    ownerId,
     updatedAt: serverTimestamp(),
   });
 }
@@ -121,10 +159,17 @@ export function subscribeCases(
   );
 }
 
-export async function createCase(db: Firestore, patientId: string, ownerId: string, input: CaseInput) {
+export async function createCase(
+  db: Firestore,
+  patientId: string,
+  userId: string,
+  createdByName: string,
+  input: CaseInput,
+) {
   const caseRef = await addDoc(collection(db, 'patients', patientId, 'cases'), {
     ...input,
-    ownerId,
+    createdBy: userId,
+    createdByName,
     patientId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -137,17 +182,18 @@ export async function createCase(db: Firestore, patientId: string, ownerId: stri
 export async function saveSuggestion(
   db: Firestore,
   patientId: string,
-  ownerId: string,
+  userId: string,
   caseInput: CaseInput,
   result: SuggestionResult,
 ) {
   return addDoc(collection(db, 'patients', patientId, 'suggestions'), {
-    ownerId,
+    createdBy: userId,
+    patientId,
     caseInput,
     blocked: result.blocked,
     redFlags: result.redFlags,
     suggestions: result.suggestions,
-    engineVersion: '0.1.0',
+    engineVersion: '0.2.0',
     createdAt: serverTimestamp(),
   });
 }

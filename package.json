@@ -1,17 +1,19 @@
 {
   "name": "patient-case-manager",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
+    "build:functions": "npm --prefix functions run build",
+    "build:all": "npm run build && npm run build:functions",
     "preview": "vite preview",
-    "test": "vitest run src/lib/remedyEngine.test.ts",
+    "test": "vitest run src/lib/*.test.ts",
     "test:rules": "firebase emulators:exec --project demo-patient-case-manager --only firestore \"vitest run tests/firestore.rules.test.ts\"",
     "test:all": "npm run test && npm run test:rules",
     "firebase:serve": "firebase emulators:start --project demo-patient-case-manager",
-    "firebase:deploy": "npm run build && firebase deploy"
+    "firebase:deploy": "npm run build:all && firebase deploy"
   },
   "dependencies": {
     "firebase": "^12.19.0",

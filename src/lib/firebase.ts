@@ -1,6 +1,12 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
+import {
+  initializeAppCheck,
+  ReCaptchaEnterpriseProvider,
+  type AppCheck,
+} from 'firebase/app-check';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFunctions, type Functions } from 'firebase/functions';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -12,18 +18,31 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+const appCheckSiteKey = import.meta.env.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY;
+
 export const firebaseReady = Object.values(firebaseConfig).every(Boolean);
 
 let app: FirebaseApp | undefined;
+let appCheck: AppCheck | undefined;
 let auth: Auth | undefined;
 let db: Firestore | undefined;
+let functions: Functions | undefined;
 let storage: FirebaseStorage | undefined;
 
 if (firebaseReady) {
   app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+  if (appCheckSiteKey && typeof window !== 'undefined') {
+    appCheck = initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  }
+
   auth = getAuth(app);
   db = getFirestore(app);
+  functions = getFunctions(app);
   storage = getStorage(app);
 }
 
-export { app, auth, db, storage };
+export { app, appCheck, auth, db, functions, storage };
