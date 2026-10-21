@@ -7,7 +7,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "serve": "npm run build && firebase emulators:start --only functions"
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "audit:legacy": "node scripts/audit-legacy-patients.cjs"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",

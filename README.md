@@ -333,3 +333,8 @@ medicine quality, storage and record-retention checks before production.
 - Patient care-team assignments are only changed through the validated server callable. Admin direct Firestore changes to `doctorIds` are denied.
 - Clinical notes, prescriptions, follow-ups and suggestions are append-only from the client. Prescriptions cannot be deleted; authors/administrators may **void** with a recorded reason through a privileged callable.
 - Before prescribing, the doctor must attest that allergies, current medicines and disclosure/dispensing requirements were reviewed. This is a **manual check**, not automated drug-interaction checking.
+
+
+## Production rollout
+
+Before serving clinical patient data, complete every gate in [PRODUCTION_RELEASE.md](PRODUCTION_RELEASE.md). Run the legacy-patient audit **before** deploying the new Firestore rules; deploy from main only through the manually confirmed protected production workflow.
