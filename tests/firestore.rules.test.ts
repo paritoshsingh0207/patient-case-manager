@@ -223,7 +223,7 @@ describe('clinic role and patient-sharing security rules', () => {
     const gaurav = testEnv.authenticatedContext('gaurav').firestore();
 
     const prescription = doc(saurabh, 'patients/patient-a/prescriptions/rx-1');
-    await assertSucceeds(setDoc(prescription, {
+    await assertFails(setDoc(prescription, {
       patientId: 'patient-a',
       createdBy: 'saurabh',
       issuedAt: '2026-10-19',
@@ -231,7 +231,7 @@ describe('clinic role and patient-sharing security rules', () => {
       items: [{ code: 'B1', directions: '4 pills twice daily', quantity: '7 days' }],
     }));
 
-    await assertSucceeds(getDoc(prescription));
+    // Direct Firestore writes cannot bypass the callable's approved-code checks.
     await assertFails(getDoc(doc(gaurav, 'patients/patient-a/prescriptions/rx-1')));
   });
 
@@ -242,13 +242,19 @@ describe('clinic role and patient-sharing security rules', () => {
     const admin = testEnv.authenticatedContext('admin').firestore();
     const saurabh = testEnv.authenticatedContext('saurabh').firestore();
 
-    await assertSucceeds(setDoc(doc(admin, 'medicineCodes/B1'), {
+    await assertFails(setDoc(doc(admin, 'medicineCodes/B1'), {
       code: 'B1',
       remedyName: 'Belladonna',
       active: true,
     }));
 
-    await assertSucceeds(getDoc(doc(saurabh, 'medicineCodes/B1')));
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(), 'medicineCodes/BE1'), {
+        code: 'BE1', remedyName: 'Belladonna', approvedForNewRx: true, active: true,
+      });
+    });
+    await assertSucceeds(getDoc(doc(saurabh, 'medicineCodes/BE1')));
+    await assertFails(updateDoc(doc(admin, 'medicineCodes/BE1'), {remedyName: 'Different medicine'}));
 
     await assertFails(setDoc(doc(saurabh, 'medicineCodes/B2'), {
       code: 'B2',

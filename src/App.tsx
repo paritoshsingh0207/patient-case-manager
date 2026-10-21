@@ -298,6 +298,7 @@ export default function App() {
             onAddPatient={() => setShowPatientForm(true)}
             isDoctor={isDoctor}
             db={activeDb}
+            functions={activeFunctions}
             userId={user.uid}
             practitionerName={practitionerName}
             addCase={addCase}
@@ -308,7 +309,7 @@ export default function App() {
         {activeView === 'medicines' ? (
           <MedicineCodeManager
             db={activeDb}
-            userId={user.uid}
+            functions={activeFunctions}
             canManage={isAdmin}
           />
         ) : null}
@@ -341,6 +342,7 @@ interface PatientWorkspaceProps {
   onAddPatient: () => void;
   isDoctor: boolean;
   db: NonNullable<typeof db>;
+  functions: NonNullable<typeof functions>;
   userId: string;
   practitionerName: string;
   addCase: (input: CaseInput) => Promise<void>;
@@ -359,6 +361,7 @@ function PatientWorkspace({
   onAddPatient,
   isDoctor,
   db,
+  functions,
   userId,
   practitionerName,
   addCase,
@@ -415,6 +418,7 @@ function PatientWorkspace({
             </div>
             <PrescriptionPanel
               db={db}
+              functions={functions}
               patient={selectedPatient}
               userId={userId}
               practitionerName={practitionerName}

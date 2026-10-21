@@ -99,6 +99,13 @@ export interface MedicineCode {
   remedyName: string;
   notes?: string;
   active: boolean;
+  approvedForNewRx: boolean;
+  expertVerified?: boolean;
+  legacyCode?: string;
+  traditionalAbbreviation?: string;
+  synonymsOrAliases?: string;
+  sourceCoverage?: string;
+  releaseVersion?: string;
   createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;

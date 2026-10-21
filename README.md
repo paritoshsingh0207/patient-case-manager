@@ -288,3 +288,39 @@ The Firestore emulator suite covers the required clinic scenarios:
 Before real patient data is stored, complete the applicable privacy/health-data compliance review, define audit-retention and backup policies, enable production monitoring, configure App Check enforcement after observing metrics, and consider MFA for privileged accounts.
 
 > The remedy module is practitioner decision support, not a diagnosis or prescription. It does not validate homeopathy as effective treatment for disease, and conventional medical evaluation should not be delayed for urgent symptoms.
+
+
+## Expert-verified alphabetical medicine master (release 1.0)
+
+This version integrates the owner's expert-verified **881-entry** medicine dictionary.
+Two-letter-prefix codes such as AB1 (Abies Canadensis), AB2 (Abies Nigra) and BE1 (Belladonna)
+are the primary identifiers. Existing B-series references remain historical aliases,
+**not** replacement document IDs. Never reuse or renumber an assigned code.
+
+### One-time import (administrator)
+
+1. Merge/deploy this code and the Firestore rules + Functions. Sign in as an active administrator.
+2. In **Medicine codes**, select the downloaded
+   `homeopathy_verified_medicine_codes_firebase_staging.json` file.
+3. The browser validates **exactly 881** verified, unique code/name pairs.
+4. Check the explicit clinical-use authorization checkbox; select **Import 881 approved medicines**.
+5. Wait for the server result. The callable validates permissions, entries and all existing
+   mappings before writing. It imports in Firestore batches. If interrupted after a batch,
+   retry with the same file; matching codes are reapproved and never remapped.
+6. Verify the registry displays 881 approved entries. No import occurs at build time,
+   and the JSON file should not be committed to the public repository by default.
+
+The staging export's original `active:false` flags reflect the earlier pre-authorization
+state; the administrator's separate authorization activates verified codes during this
+specific import. Manual additions require explicit expert and clinical-use confirmation.
+
+**Safety and audit:** Only server-side admin callables can create, import or archive
+medicine mappings. Direct Firestore client writes are denied. Historical names are immutable
+and archived codes cannot be prescribed. Prescriptions are now issued through a doctor-only
+callable that checks patient assignment and every selected code's live approval status.
+The medicine names remain available for authenticated clinician/dispensing lookup.
+Patient-facing documents must still meet applicable disclosure, labelling and dispensing law.
+
+The previous app release, patient sharing, and any legacy owner-scoped patient records
+must be migrated before using this version with real patient data. Complete privacy,
+medicine quality, storage and record-retention checks before production.

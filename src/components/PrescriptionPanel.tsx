@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Firestore } from 'firebase/firestore';
+import type { Functions } from 'firebase/functions';
 import type { MedicineCode, Patient, PrescriptionItem, PrescriptionRecord } from '../types';
 import { subscribeMedicineCodes } from '../services/medicineService';
 import {
@@ -9,6 +10,7 @@ import {
 
 interface PrescriptionPanelProps {
   db: Firestore;
+  functions: Functions;
   patient: Patient;
   userId: string;
   practitionerName: string;
@@ -27,6 +29,7 @@ function emptyItem(): PrescriptionItem {
 
 export function PrescriptionPanel({
   db,
+  functions,
   patient,
   userId,
   practitionerName,
@@ -61,7 +64,7 @@ export function PrescriptionPanel({
   }, [db, patient.id]);
 
   const activeCodes = useMemo(
-    () => medicineCodes.filter((item) => item.active),
+    () => medicineCodes.filter((item) => item.active && item.approvedForNewRx),
     [medicineCodes],
   );
 
@@ -86,17 +89,15 @@ export function PrescriptionPanel({
     setMessage('');
 
     try {
-      await createPrescription(db, {
+      await createPrescription(functions, {
         patientId: patient.id,
-        userId,
-        issuedByName: practitionerName,
         issuedAt,
         items,
         patientInstructions,
       });
       setItems([emptyItem()]);
       setPatientInstructions('');
-      setMessage('Coded prescription saved. The patient printout contains medicine codes only.');
+      setMessage('Approved coded prescription saved. Clinic medicine mapping remains available for authorized verification.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not save prescription.');
     } finally {
@@ -121,7 +122,7 @@ export function PrescriptionPanel({
             <p className="eyebrow">Patient-facing codes</p>
             <h2>Prescription</h2>
             <p className="section-copy">
-              Select internal medicines here; the printed prescription intentionally shows only the code.
+              Only active, expert-approved medicine codes can be prescribed. Keep full medicine identity available to authorized dispensers and patients as required.
             </p>
           </div>
           <span className="status-pill">Code only</span>
@@ -288,7 +289,7 @@ export function PrescriptionPanel({
               <span>Prescribed by</span>
               <strong>{printable.issuedByName}</strong>
             </div>
-            <p>This prescription intentionally identifies dispensed medicines by clinic code.</p>
+            <p>Medicine names and dispensing details are available from the clinic on request.</p>
           </footer>
         </section>
       ) : null}

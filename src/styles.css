@@ -2490,3 +2490,33 @@ label {
     text-align: right;
   }
 }
+
+
+/* Approved medicine-master upload and immutable code registry */
+.registry-import-box {
+  display: grid;
+  gap: 11px;
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(244, 251, 247, .75);
+}
+.registry-import-box h3 {margin:0;font-size:15px;}
+.registry-import-box p {margin:0;}
+.registry-import-box label {display:grid;gap:6px;font-size:12px;font-weight:700;}
+.registry-approval {
+  display:flex !important;
+  gap:10px !important;
+  align-items:center;
+  font-size:12px;
+  line-height:1.5;
+  font-weight:600;
+}
+.registry-approval input {width:18px;height:18px;min-width:18px;min-height:18px;padding:0;}
+.registry-import-box .button {justify-self:start;}
+.registry-manual-approval {grid-column:1/-1;}
+@media(max-width:720px){
+  .medicine-code-form {grid-template-columns:1fr;}
+  .registry-import-box .button {width:100%;}
+}
