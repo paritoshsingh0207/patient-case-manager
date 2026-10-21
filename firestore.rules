@@ -1,131 +1,137 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
-    }
-
+    function signedIn() { return request.auth != null; }
     function hasProfile() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
-
     function profile() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-
     function isActiveMember() {
-      return hasProfile()
-        && profile().active == true
+      return hasProfile() && profile().active == true
         && profile().role in ['admin', 'doctor', 'practitioner'];
     }
-
-    function isAdmin() {
-      return isActiveMember() && profile().role == 'admin';
-    }
-
+    function isAdmin() { return isActiveMember() && profile().role == 'admin'; }
     function isDoctor() {
-      return isActiveMember() && profile().role in ['doctor', 'practitioner'];
+      return isActiveMember() && profile().role in ['doctor','practitioner'];
     }
-
     function patientExists(patientId) {
       return exists(/databases/$(database)/documents/patients/$(patientId));
     }
-
     function patient(patientId) {
       return get(/databases/$(database)/documents/patients/$(patientId)).data;
     }
-
     function canAccessPatient(patientId) {
-      return isActiveMember()
-        && patientExists(patientId)
-        && (
-          isAdmin()
-          || (isDoctor() && request.auth.uid in patient(patientId).doctorIds)
-        );
+      return isActiveMember() && patientExists(patientId)
+        && (isAdmin() || (isDoctor() && request.auth.uid in patient(patientId).doctorIds));
     }
-
     function childBelongsToCaller(patientId) {
-      return isDoctor()
-        && canAccessPatient(patientId)
+      return isDoctor() && canAccessPatient(patientId)
         && request.resource.data.patientId == patientId
         && request.resource.data.createdBy == request.auth.uid;
     }
-
-    function canModifyOwnChild(patientId) {
-      return canAccessPatient(patientId)
-        && resource.data.createdBy == request.auth.uid
-        && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.patientId == patientId;
+    function isApprovedCode(code) {
+      return code is string && code.matches('^[A-Z]{2}[1-9][0-9]*$')
+        && exists(/databases/$(database)/documents/medicineCodes/$(code))
+        && get(/databases/$(database)/documents/medicineCodes/$(code)).data.active == true
+        && get(/databases/$(database)/documents/medicineCodes/$(code)).data.approvedForNewRx == true
+        && get(/databases/$(database)/documents/medicineCodes/$(code)).data.expertVerified == true;
     }
-
+    // One medicine per prescription document: rules verify every chosen code.
+    // Multi-medicine Rx documents cannot safely validate arbitrary arrays in rules.
+    function validPrescription(patientId) {
+      let d = request.resource.data;
+      let item = d.items[0];
+      return childBelongsToCaller(patientId)
+        && d.keys().hasOnly(['patientId','createdBy','issuedByName','issuedAt','medicineCode',
+                             'items','patientInstructions','clinicalReviewConfirmed','createdAt'])
+        && d.keys().hasAll(['patientId','createdBy','issuedByName','issuedAt','medicineCode',
+                            'items','patientInstructions','clinicalReviewConfirmed','createdAt'])
+        && d.createdAt == request.time
+        && d.issuedByName is string && d.issuedByName.size() > 0 && d.issuedByName.size() <= 120
+        && d.issuedAt is string && d.issuedAt.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.patientInstructions is string && d.patientInstructions.size() <= 3000
+        && d.clinicalReviewConfirmed == true
+        && d.items is list && d.items.size() == 1
+        && item is map
+        && item.keys().hasOnly(['code','potency','dosageForm','directions','quantity'])
+        && item.keys().hasAll(['code','potency','dosageForm','directions','quantity'])
+        && item.code == d.medicineCode
+        && item.potency is string && item.potency.size() > 0 && item.potency.size() <= 40
+        && item.dosageForm is string && item.dosageForm.size() > 0 && item.dosageForm.size() <= 70
+        && item.directions is string && item.directions.size() > 0 && item.directions.size() <= 500
+        && item.quantity is string && item.quantity.size() <= 200
+        && isApprovedCode(d.medicineCode);
+    }
+    function canVoidPrescription(patientId) {
+      return canAccessPatient(patientId)
+        && (isAdmin() || (isDoctor() && resource.data.createdBy == request.auth.uid))
+        && !('voidedAt' in resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['voidedAt','voidedBy','voidReason'])
+        && request.resource.data.keys().hasAll(['voidedAt','voidedBy','voidReason'])
+        && request.resource.data.voidedAt == request.time
+        && request.resource.data.voidedBy == request.auth.uid
+        && request.resource.data.voidReason is string
+        && request.resource.data.voidReason.size() > 0
+        && request.resource.data.voidReason.size() <= 500;
+    }
     match /users/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
+      // Provisioning and deactivation use the offline Admin SDK script only.
       allow create, update, delete: if false;
     }
-
     match /patients/{patientId} {
       allow create: if isAdmin()
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.doctorIds is list;
-
+        && request.resource.data.doctorIds is list
+        && request.resource.data.doctorIds.size() <= 20;
       allow create: if isDoctor()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.doctorIds == [request.auth.uid];
-
-      allow read: if isAdmin()
-        || (
-          isDoctor()
-          && resource.data.doctorIds is list
-          && request.auth.uid in resource.data.doctorIds
-        );
-
-      // Care-team membership changes require the server callable to validate every UID.
+      allow read: if isAdmin() || (isDoctor()
+        && resource.data.doctorIds is list
+        && request.auth.uid in resource.data.doctorIds);
+      // Admin can manage care teams without Cloud Functions. Active status is
+      // independently checked on every doctor read; only admins can share.
       allow update: if isAdmin()
         && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.doctorIds == resource.data.doctorIds;
-
+        && request.resource.data.doctorIds is list
+        && request.resource.data.doctorIds.size() <= 20;
       allow update: if isDoctor()
         && request.auth.uid in resource.data.doctorIds
         && request.resource.data.doctorIds == resource.data.doctorIds
         && request.resource.data.createdBy == resource.data.createdBy;
-
-      allow delete: if isAdmin();
-
+      allow delete: if false;
       match /cases/{caseId} {
         allow read: if canAccessPatient(patientId);
         allow create: if childBelongsToCaller(patientId);
-        // Clinical notes are append-only. Corrections require a new dated entry.
         allow update, delete: if false;
       }
-
       match /suggestions/{suggestionId} {
         allow read: if canAccessPatient(patientId);
         allow create: if childBelongsToCaller(patientId);
         allow update, delete: if false;
       }
-
       match /followUps/{followUpId} {
         allow read: if canAccessPatient(patientId);
         allow create: if childBelongsToCaller(patientId);
         allow update, delete: if false;
       }
-
       match /prescriptions/{prescriptionId} {
         allow read: if canAccessPatient(patientId);
-        // Server validates doctor assignment and each approved medicine code.
-        allow create, update, delete: if false;
+        allow create: if validPrescription(patientId);
+        allow update: if canVoidPrescription(patientId);
+        allow delete: if false;
       }
     }
-
     match /medicineCodes/{codeId} {
       allow read: if isActiveMember();
-      // Mappings are immutable; privileged callable functions own all writes.
-      allow create, update: if false;
-      allow delete: if false;
+      // Import and archive via offline Admin SDK; never overwrite browser-side.
+      allow create, update, delete: if false;
     }
-
     match /{document=**} {
       allow read, write: if false;
     }
