@@ -134,7 +134,12 @@ export const importVerifiedMedicines = onCall(
               throw new HttpsError('already-exists', 'Cannot overwrite or reactivate code ' + item.code + '.');
             }
             tx.update(ref, {
-              expertVerified: true, updatedAt: FieldValue.serverTimestamp(),
+              expertVerified: true, reviewStatus: 'Verified',
+              legacyCode: item.legacyCode,
+              traditionalAbbreviation: item.traditionalAbbreviation,
+              synonymsOrAliases: item.synonymsOrAliases,
+              sourceCoverage: item.sourceCoverage,
+              updatedAt: FieldValue.serverTimestamp(),
               lastImportCheckedBy: admin.uid,
             });
             batchReapproved++;

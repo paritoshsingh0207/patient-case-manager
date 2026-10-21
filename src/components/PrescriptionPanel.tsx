@@ -129,7 +129,9 @@ export function PrescriptionPanel({
   }
 
   function internalName(code: string) {
-    return medicineCodes.find((item) => item.code === code)?.remedyName ?? '';
+    const primary = medicineCodes.find((item) => item.code === code);
+    const historical = medicineCodes.find((item) => item.legacyCode === code);
+    return primary?.remedyName ?? historical?.remedyName ?? '';
   }
 
   return (
