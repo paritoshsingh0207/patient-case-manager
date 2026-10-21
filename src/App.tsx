@@ -8,7 +8,7 @@ import type {
   PractitionerAccess,
   SuggestionResult,
 } from './types';
-import { auth, db, firebaseReady, functions } from './lib/firebase';
+import { auth, db, firebaseReady } from './lib/firebase';
 import { AuthPanel } from './components/AuthPanel';
 import { PatientForm } from './components/PatientForm';
 import { CaseEditor } from './components/CaseEditor';
@@ -159,13 +159,12 @@ export default function App() {
     return <SetupRequired />;
   }
 
-  if (authLoading || !auth || !db || !functions) {
+  if (authLoading || !auth || !db) {
     return <GateLoader message="Preparing secure workspace…" />;
   }
 
   const activeAuth = auth;
   const activeDb = db;
-  const activeFunctions = functions;
 
   if (!user) {
     return <AuthPanel auth={activeAuth} />;
@@ -298,7 +297,6 @@ export default function App() {
             onAddPatient={() => setShowPatientForm(true)}
             isDoctor={isDoctor}
             db={activeDb}
-            functions={activeFunctions}
             userId={user.uid}
             practitionerName={practitionerName}
             addCase={addCase}
@@ -342,7 +340,6 @@ interface PatientWorkspaceProps {
   onAddPatient: () => void;
   isDoctor: boolean;
   db: NonNullable<typeof db>;
-  functions: NonNullable<typeof functions>;
   userId: string;
   practitionerName: string;
   addCase: (input: CaseInput) => Promise<void>;
@@ -361,7 +358,6 @@ function PatientWorkspace({
   onAddPatient,
   isDoctor,
   db,
-  functions,
   userId,
   practitionerName,
   addCase,
@@ -418,7 +414,6 @@ function PatientWorkspace({
             </div>
             <PrescriptionPanel
               db={db}
-              functions={functions}
               patient={selectedPatient}
               userId={userId}
               practitionerName={practitionerName}
