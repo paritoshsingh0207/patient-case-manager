@@ -307,7 +307,6 @@ export default function App() {
         {activeView === 'medicines' ? (
           <MedicineCodeManager
             db={activeDb}
-            functions={activeFunctions}
             canManage={isAdmin}
           />
         ) : null}
@@ -315,7 +314,6 @@ export default function App() {
         {activeView === 'admin' && isAdmin ? (
           <AdminConsole
             db={activeDb}
-            functions={activeFunctions}
             patients={patients}
           />
         ) : null}
