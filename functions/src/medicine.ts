@@ -1,4 +1,5 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
+import { createHash } from 'node:crypto';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
@@ -28,6 +29,7 @@ function optional(value: unknown, maximum: number): string {
   }
   return value.trim();
 }
+const APPROVED_V1_SHA256 = '117f6e5f51811a59e15311866b62f52e41f16ee96d65cf0d591dd6d0615a92e6';
 type VerifiedMedicine = ReturnType<typeof validateMedicine>;
 function validateMedicine(raw: unknown) {
   if (!raw || typeof raw !== 'object') {
@@ -70,7 +72,12 @@ export const importVerifiedMedicines = onCall(
       throw new HttpsError('invalid-argument', 'The approved release must contain exactly 881 medicines.');
     }
     const entries: VerifiedMedicine[] = raw.map(validateMedicine);
-    const codes = new Set<string>(), names = new Set<string>();
+    const canonical = [...entries].sort((a,b) => a.code.localeCompare(b.code))
+      .map(item => item.code + '\t' + item.remedyName + '\t' + item.legacyCode + '\n').join('');
+    if (createHash('sha256').update(canonical, 'utf8').digest('hex') !== APPROVED_V1_SHA256) {
+      throw new HttpsError('failed-precondition', 'The medicine-code mapping differs from the expert-approved release. Import canceled.');
+    }
+    const codes = new Set<string>(), names = new Set<string>(), legacyCodes = new Set<string>();
     for (const item of entries) {
       const name = item.remedyName.toLowerCase();
       if (codes.has(item.code) || names.has(name)) {
@@ -78,6 +85,10 @@ export const importVerifiedMedicines = onCall(
       }
       codes.add(item.code);
       names.add(name);
+      if (item.legacyCode) {
+        if (legacyCodes.has(item.legacyCode)) throw new HttpsError('invalid-argument', 'Duplicate legacy code in import.');
+        legacyCodes.add(item.legacyCode);
+      }
     }
     const existing = new Map<string, Record<string, unknown>>();
     for (let n = 0; n < entries.length; n += 200) {
@@ -96,30 +107,48 @@ export const importVerifiedMedicines = onCall(
       )) {
         throw new HttpsError('already-exists', 'Code ' + item.code + ' already maps to a different medicine.');
       }
+      if (previous && (previous.active !== true || previous.approvedForNewRx !== true)) {
+        throw new HttpsError('failed-precondition', 'Code ' + item.code + ' is inactive. An import cannot silently reactivate an archived code.');
+      }
     }
     let created = 0, reapproved = 0;
-    // Firestore batches are not globally atomic; a retry completes partial progress.
+    // Per-batch transactions guard against concurrent archives or code changes.
+    // The overall release is retryable but not globally atomic across batches.
     for (let n = 0; n < entries.length; n += 300) {
-      const batch = db.batch();
-      for (const item of entries.slice(n, n + 300)) {
-        const ref = db.doc('medicineCodes/' + item.code);
-        if (existing.has(item.code)) {
-          batch.update(ref, {
-            active: true, approvedForNewRx: true, expertVerified: true,
-            updatedAt: FieldValue.serverTimestamp(), authorizedBy: admin.uid,
-          });
-          reapproved++;
-        } else {
-          batch.create(ref, {
-            ...item, active: true, approvedForNewRx: true,
-            createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
-            createdBy: admin.uid, authorizedBy: admin.uid,
-            verificationAttestedOn: '2026-10-21', releaseVersion: '1.0-expert-verified',
-          });
-          created++;
+      const slice = entries.slice(n, n + 300);
+      let batchCreated = 0, batchReapproved = 0;
+      await db.runTransaction(async (tx) => {
+        const refs = slice.map(item => db.doc('medicineCodes/' + item.code));
+        const snapshots = await tx.getAll(...refs);
+        for (let i = 0; i < slice.length; i++) {
+          const item = slice[i];
+          const snapshot = snapshots[i];
+          const ref = refs[i];
+          if (snapshot.exists) {
+            const previous = snapshot.data()!;
+            if (typeof previous.remedyName !== 'string' ||
+                previous.remedyName.trim().toLowerCase() !== item.remedyName.toLowerCase() ||
+                (previous.legacyCode && previous.legacyCode !== item.legacyCode) ||
+                previous.active !== true || previous.approvedForNewRx !== true) {
+              throw new HttpsError('already-exists', 'Cannot overwrite or reactivate code ' + item.code + '.');
+            }
+            tx.update(ref, {
+              expertVerified: true, updatedAt: FieldValue.serverTimestamp(),
+              lastImportCheckedBy: admin.uid,
+            });
+            batchReapproved++;
+          } else {
+            tx.create(ref, {
+              ...item, active: true, approvedForNewRx: true,
+              createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+              createdBy: admin.uid, authorizedBy: admin.uid,
+              verificationAttestedOn: '2026-10-21', releaseVersion: '1.0-expert-verified',
+            });
+            batchCreated++;
+          }
         }
-      }
-      await batch.commit();
+      });
+      created += batchCreated; reapproved += batchReapproved;
     }
     return { imported: entries.length, created, reapproved };
   },
@@ -181,6 +210,9 @@ export const createCodedPrescription = onCall(async (request) => {
   if (!Array.isArray(rawItems) || rawItems.length < 1 || rawItems.length > 20) {
     throw new HttpsError('invalid-argument', 'Add between 1 and 20 medicines.');
   }
+  if (request.data?.clinicalReviewConfirmed !== true) {
+    throw new HttpsError('failed-precondition', 'Confirm review of patient medication history, allergies and identity disclosure.');
+  }
   const items = rawItems.map((raw: unknown) => {
     const item = raw as Record<string, unknown> | null;
     const code = mandatory(item?.code, 'Medicine code', 24).toUpperCase();
@@ -204,7 +236,38 @@ export const createCodedPrescription = onCall(async (request) => {
     patientId, createdBy: doctor.uid,
     issuedByName: typeof doctor.profile.displayName === 'string' ? doctor.profile.displayName : 'Doctor',
     issuedAt, items, patientInstructions: optional(request.data?.patientInstructions, 3000),
+    clinicalReviewConfirmed: true, clinicalReviewAt: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp(),
   });
   return { id: prescription.id };
+});
+
+
+/** Void a prescription without erasing the medical record or its signed authorship. */
+export const voidCodedPrescription = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in is required.');
+  const profile = (await db.doc('users/' + uid).get()).data();
+  if (!profile || profile.active !== true || !['admin', 'doctor', 'practitioner'].includes(profile.role)) {
+    throw new HttpsError('permission-denied', 'An active clinic member is required.');
+  }
+  const patientId = mandatory(request.data?.patientId, 'Patient ID', 128);
+  const prescriptionId = mandatory(request.data?.prescriptionId, 'Prescription ID', 128);
+  const reason = mandatory(request.data?.reason, 'Void reason', 500);
+  const patientRef = db.doc('patients/' + patientId);
+  const prescriptionRef = patientRef.collection('prescriptions').doc(prescriptionId);
+  await db.runTransaction(async tx => {
+    const [patient, prescription] = await Promise.all([tx.get(patientRef),tx.get(prescriptionRef)]);
+    if (!patient.exists || !prescription.exists) throw new HttpsError('not-found', 'Prescription not found.');
+    const data = prescription.data()!;
+    const assigned = Array.isArray(patient.data()?.doctorIds) && patient.data()!.doctorIds.includes(uid);
+    const canVoid = profile.role === 'admin' || (assigned && data.createdBy === uid);
+    if (!canVoid) throw new HttpsError('permission-denied', 'Only the prescribing doctor or clinic administrator may void this prescription.');
+    if (data.voidedAt) throw new HttpsError('failed-precondition', 'Prescription is already voided.');
+    tx.update(prescriptionRef, {
+      voidedAt: FieldValue.serverTimestamp(),
+      voidedBy: uid, voidReason: reason,
+    });
+  });
+  return { voided: true };
 });

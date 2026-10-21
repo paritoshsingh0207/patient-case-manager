@@ -187,4 +187,4 @@ export const setPatientDoctors = onCall(async (request) => {
   return { updated: true };
 });
 
-export { importVerifiedMedicines, registerMedicineCode, archiveMedicineCode, createCodedPrescription } from './medicine.js';
+export { importVerifiedMedicines, registerMedicineCode, archiveMedicineCode, createCodedPrescription, voidCodedPrescription } from './medicine.js';

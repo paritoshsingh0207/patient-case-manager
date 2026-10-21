@@ -81,9 +81,10 @@ service cloud.firestore {
           && request.auth.uid in resource.data.doctorIds
         );
 
+      // Care-team membership changes require the server callable to validate every UID.
       allow update: if isAdmin()
         && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.doctorIds is list;
+        && request.resource.data.doctorIds == resource.data.doctorIds;
 
       allow update: if isDoctor()
         && request.auth.uid in resource.data.doctorIds
@@ -95,42 +96,26 @@ service cloud.firestore {
       match /cases/{caseId} {
         allow read: if canAccessPatient(patientId);
         allow create: if childBelongsToCaller(patientId);
-        allow update: if isAdmin() || canModifyOwnChild(patientId);
-        allow delete: if isAdmin() || (
-          canAccessPatient(patientId)
-          && resource.data.createdBy == request.auth.uid
-        );
+        // Clinical notes are append-only. Corrections require a new dated entry.
+        allow update, delete: if false;
       }
 
       match /suggestions/{suggestionId} {
         allow read: if canAccessPatient(patientId);
         allow create: if childBelongsToCaller(patientId);
-        allow update: if false;
-        allow delete: if isAdmin() || (
-          canAccessPatient(patientId)
-          && resource.data.createdBy == request.auth.uid
-        );
+        allow update, delete: if false;
       }
 
       match /followUps/{followUpId} {
         allow read: if canAccessPatient(patientId);
         allow create: if childBelongsToCaller(patientId);
-        allow update: if isAdmin() || canModifyOwnChild(patientId);
-        allow delete: if isAdmin() || (
-          canAccessPatient(patientId)
-          && resource.data.createdBy == request.auth.uid
-        );
+        allow update, delete: if false;
       }
 
       match /prescriptions/{prescriptionId} {
         allow read: if canAccessPatient(patientId);
         // Server validates doctor assignment and each approved medicine code.
-        allow create: if false;
-        allow update: if false;
-        allow delete: if isAdmin() || (
-          canAccessPatient(patientId)
-          && resource.data.createdBy == request.auth.uid
-        );
+        allow create, update, delete: if false;
       }
     }
 
