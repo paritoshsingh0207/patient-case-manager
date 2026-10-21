@@ -1,346 +1,92 @@
-# Patient Case Manager
+# Patient Case Manager — Firebase Spark Edition
 
-Firebase-ready patient case management for a clinic with role-based doctor access, administrator-controlled patient sharing, coded homeopathic prescriptions, and an internal medicine-code registry.
-
-## Access model
-
-There are two application roles:
-
-- **Admin**
-  - can see every patient and the complete case/prescription history;
-  - can add and remove doctors;
-  - can decide which doctors may see each patient;
-  - can create patients;
-  - can create/archive medicine-code mappings;
-  - cannot author a clinical case note or prescription.
-- **Doctor**
-  - sees only patients whose `doctorIds` list contains that doctor's Firebase UID;
-  - can read the complete history of an assigned patient;
-  - can add their own case notes and coded prescriptions;
-  - cannot change the patient's care team;
-  - can look up internal medicine codes.
-
-Removing a doctor deletes the Firebase Authentication login, marks the internal user profile inactive/deleted for audit history, and removes the doctor's UID from all patient care teams. Existing medical records keep their original author identity.
+Patient case management with role-based doctor access, an expert-verified homeopathic
+medicine dictionary, and coded prescriptions. The deployed application uses
+**Firebase Hosting, Authentication and Firestore only** — no Cloud Functions
+or Cloud Storage. The functions/ directory holds trusted offline admin scripts.
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    Device["Admin / Doctor browser"] --> Hosting["Firebase Hosting\nReact + TypeScript"]
-    Hosting --> Auth["Firebase Authentication"]
-    Auth --> Profile{"users/{uid}\nactive + role"}
-
-    Profile -- invalid --> Denied["Access denied"]
-    Profile -- admin --> AdminUI["Admin workspace"]
-    Profile -- doctor --> DoctorUI["Doctor workspace"]
+- Authentication: email/password with no public registration.
+- Firestore users/{uid}: trusted offline provisioning of admin and doctor profiles.
+  Browser writes to any user role are forbidden.
+- Firestore patients/{id}: administrator controls doctorIds; doctors see only assigned patients.
+- Firestore medicineCodes/{AB1...}: immutable approved mappings and legacy B aliases.
+  Browser writes are forbidden.
+- Firestore patients/{id}/prescriptions/{rxId}: one medicine per new prescription
+  document. Rules validate the code against its approved registry record, and
+  record the issuing doctor, potency, form, directions, date, and review attestation.
+  Historical multi-item records remain readable. Incorrect prescriptions may be
+  voided with an audit reason but cannot be silently deleted or changed.
+- No file attachments / Cloud Storage feature.
 
-    AdminUI --> AdminFns["Callable Cloud Functions\nFirebase Admin SDK"]
-    AdminFns --> AuthAdmin["Create / delete doctor login"]
-    AdminFns --> Assign["Set patients/{id}.doctorIds"]
+## Setup
 
-    AdminUI --> AllPatients["All patients + histories"]
-    DoctorUI --> AssignedQuery["patients where doctorIds\narray-contains doctor UID"]
+Node.js 22+, npm and Java 21+ for emulator security tests:
 
-    AssignedQuery --> Patient["Patient A"]
-    AllPatients --> Patient
+    git pull origin main
+    npm ci
+    npm --prefix functions install
+    cp .env.example .env.local
 
-    Patient --> Cases["cases/*"]
-    Patient --> Prescriptions["prescriptions/*"]
-    Patient --> Suggestions["suggestions/*"]
-    Patient --> Followups["followUps/*"]
+Configure Firebase web-app values and clinic name/address in .env.local. Check
+the Firebase project before deploying; the example points to awakening-casemanager.
 
-    AdminUI --> Codes["medicineCodes/{code}"]
-    DoctorUI --> Codes
+## Patient migration (before stricter Rules)
 
-    Codes --> Internal["B1 → Belladonna\ninternal only"]
-    Prescriptions --> PatientCopy["Printed prescription\nB1 + directions only"]
+Back up Firestore, test restore, then audit without writing:
 
-    Rules["Firestore / Storage Rules"] --> Patient
-    Rules --> Codes
-    AppCheck["Firebase App Check"] -. production attestation .-> Rules
-```
+    node functions/scripts/audit-legacy-patients.cjs --project=YOUR_PROJECT_ID
 
-### Example: Patient A
+Resolve unprovisioned patient ownerId values. When the audit and backup are
+approved, follow SPARK_RELEASE.md for the explicit opt-in migration command.
 
-If Patient A is assigned only to Doctor Saurabh:
+## Doctor and admin accounts
 
-```text
-patients/patient-a
-  doctorIds:
-    - <SAURABH_UID>
-```
+Create each account in Firebase Console → Authentication → Users, copy its UID,
+then authorize it using the locally executed Firebase Admin SDK:
 
-- Admin: can see Patient A and all history.
-- Doctor Saurabh: can see Patient A and all history.
-- Doctor Gaurav: cannot read Patient A or any nested case/prescription.
-- Admin adds Gaurav's UID to `doctorIds`: Gaurav can now see the full history.
-- Saurabh and Gaurav cannot edit `doctorIds` themselves.
+    node functions/scripts/manage-doctor.cjs --project=YOUR_PROJECT_ID --confirm-project=YOUR_PROJECT_ID --uid=AUTH_UID --mode=activate --role=doctor
 
-Firestore Security Rules enforce the same behavior even if somebody bypasses the React UI and calls Firestore directly.
+For the first admin, append --role=admin --confirm-admin-role instead.
+To remove access, use --mode=deactivate. The inactive profile loses all clinic
+access, even if the Firebase Authentication login still exists; disable the
+Auth login separately as needed.
 
-## Prescription-code model
+## Import expert-approved medicines (881 entries)
 
-Medicine names live in the internal registry:
-
-```text
-medicineCodes/BE1
-  code: "BE1"
-  remedyName: "Belladonna"
-  active: true
-```
+The release JSON is NOT checked into this public GitHub repository. Download
+the approved homeopathy_verified_medicine_codes_firebase_staging.json file.
+The exact 881 medicine identities and 688 historical aliases are pinned by a
+release fingerprint. Import runs on your computer with authorized Google
+Application Default Credentials (ADC), not in Firebase Cloud Functions.
 
-A prescription stores the code, not the remedy name:
-
-```text
-patients/{patientId}/prescriptions/{prescriptionId}
-  createdBy: <DOCTOR_UID>
-  issuedByName: "Dr Saurabh"
-  issuedAt: "2026-10-19"
-  items:
-    - code: "BE1"
-      directions: "4 pills twice daily"
-      quantity: "7 days"
-```
-
-The doctor sees **BE1 — Belladonna** while composing the prescription. The print stylesheet hides the application UI and prints only:
+Dry run (read-only):
 
-- patient identity;
-- prescription date/reference;
-- medicine code;
-- patient-visible directions;
-- quantity/duration;
-- patient instructions;
-- prescriber name.
+    node functions/scripts/import-verified-medicines.cjs --project=YOUR_PROJECT_ID --file=/path/to/homeopathy_verified_medicine_codes_firebase_staging.json
 
-Medicine codes are **archived rather than deleted**. An archived code stops appearing in new prescriptions, but its historical code-to-medicine lookup remains available.
+After review, backup and explicit release approval:
 
-## Bootstrap the first admin
+    node functions/scripts/import-verified-medicines.cjs --project=YOUR_PROJECT_ID --file=/path/to/homeopathy_verified_medicine_codes_firebase_staging.json --apply --confirm-project=YOUR_PROJECT_ID --backup-confirmed
 
-The first admin is provisioned once in Firebase Console.
-
-1. Create the admin in **Authentication → Users**.
-2. Copy the Firebase Authentication UID.
-3. Create `users/{ADMIN_UID}` in Firestore:
-
-```text
-active: true
-role: "admin"
-displayName: "Clinic Administrator"
-email: "admin@clinic.example"
-```
+The importer rejects mismatched names, codes, legacy aliases, previously
+archived entries or unapproved releases, and is safe to retry for approved
+matching data. Firestore reads/writes count against Spark quotas.
 
-After that, the Admin workspace can create/remove doctor accounts.
-
-Legacy `role: "practitioner"` profiles are treated as doctors for compatibility, but new accounts use `role: "doctor"`.
+## Tests and manual deployment
 
-## Adding a doctor
+    npm run test:all
+    npm run build
+    npx firebase-tools login
+    npx firebase-tools deploy --project YOUR_PROJECT_ID --only hosting,firestore
 
-Admin → **Doctors**:
+Do NOT deploy functions or storage on Spark. Verify the selected Hosting site
+so that you do not overwrite an unrelated Awakening website.
 
-1. Enter the doctor's name and email.
-2. The callable `createDoctor` function creates the Firebase Authentication account.
-3. It creates `users/{doctorUid}` with:
-   - `active: true`
-   - `role: "doctor"`
-4. It returns a password-setup link.
-5. Send that link to the doctor through a trusted channel.
-6. Use **Patient sharing** to assign one or more patients.
+See SPARK_RELEASE.md for all release gates, backup, migration, App Check,
+clinical prescription/dispensing checks and rollback.
 
-The client cannot create or modify role documents directly; only the server-side Admin SDK functions can provision doctor accounts.
-
-## Removing a doctor
-
-Admin → **Doctors → Remove** calls the `removeDoctor` function. It:
-
-1. removes the UID from every `patients/{id}.doctorIds` array;
-2. deletes the Firebase Authentication user;
-3. retains the Firestore user record as an inactive audit tombstone;
-4. leaves historical case/prescription authorship untouched.
-
-## Patient data model
-
-```text
-users/{uid}
-  active
-  role: admin | doctor
-  displayName
-  email
-
-patients/{patientId}
-  createdBy
-  doctorIds[]
-  demographics/history...
-
-patients/{patientId}/cases/{caseId}
-  patientId
-  createdBy
-  createdByName
-  structured consultation fields...
-
-patients/{patientId}/prescriptions/{prescriptionId}
-  patientId
-  createdBy
-  issuedByName
-  issuedAt
-  items[]            # code + directions + quantity, no remedy name
-  patientInstructions
-
-patients/{patientId}/suggestions/{suggestionId}
-patients/{patientId}/followUps/{followUpId}
-
-medicineCodes/{CODE}
-  code
-  remedyName
-  active
-  notes
-```
-
-## Local development
-
-Prerequisites:
-
-- Node.js 22+
-- npm
-- Java 21+ for Firestore emulator rule tests
-
-Install both the web app and Functions dependencies:
-
-```bash
-npm install
-npm --prefix functions install
-cp .env.example .env.local
-```
-
-Configure `.env.local` with the Firebase Web App configuration:
-
-```dotenv
-VITE_FIREBASE_API_KEY=...
-VITE_FIREBASE_AUTH_DOMAIN=...
-VITE_FIREBASE_PROJECT_ID=...
-VITE_FIREBASE_STORAGE_BUCKET=...
-VITE_FIREBASE_MESSAGING_SENDER_ID=...
-VITE_FIREBASE_APP_ID=...
-
-# Leave blank for ordinary local development until App Check is configured.
-VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=
-```
-
-Start the Vite app:
-
-```bash
-npm run dev
-```
-
-For Admin doctor-management actions, either deploy the callable functions to your development Firebase project or connect the client to the Functions emulator in a dedicated emulator-development configuration.
-
-## Deploy Firebase resources
-
-Cloud Functions production deployment requires a Firebase project on the Blaze plan.
-
-```bash
-npx firebase-tools login
-npx firebase-tools use --add
-
-npm install
-npm --prefix functions install
-npm run build:all
-
-npx firebase-tools deploy --only hosting,firestore,storage,functions
-```
-
-The callable functions use authenticated Firebase callable requests and verify that the caller's `users/{uid}` profile is an active admin before performing privileged user-management or patient-sharing operations.
-
-## Tests
-
-```bash
-npm test
-npm run test:rules
-npm run build
-npm run build:functions
-```
-
-The Firestore emulator suite covers the required clinic scenarios:
-
-- unprovisioned/inactive users are denied;
-- a doctor can read their own profile but not other user profiles;
-- Doctor Saurabh can see Patient A when assigned;
-- Doctor Gaurav cannot see Patient A when unassigned;
-- Admin can see every patient and case history;
-- Admin can share Patient A with Gaurav;
-- a doctor cannot share a patient themselves;
-- assigned doctors can author clinical records;
-- admins can read but cannot author doctor case notes/prescriptions;
-- an unassigned doctor cannot read a coded prescription;
-- only admin can change the internal medicine-code registry;
-- a newly shared doctor cannot rewrite another doctor's historical case note.
-
-## Security notes
-
-- The login page has no public registration flow.
-- Authentication is not treated as authorization: Firestore rules independently verify role and patient assignment.
-- Admin privilege for doctor lifecycle operations is verified again inside Cloud Functions.
-- Clinical histories are patient-scoped and care-team-scoped.
-- Medicine names are not copied into patient prescription documents.
-- Cloud Storage paths are patient-scoped; assigned doctors can access patient attachments, while upload/delete ownership is constrained.
-- Firebase Hosting sends clickjacking/content-type/referrer/permissions headers.
-- App Check / reCAPTCHA Enterprise can be enabled for production.
-
-Before real patient data is stored, complete the applicable privacy/health-data compliance review, define audit-retention and backup policies, enable production monitoring, configure App Check enforcement after observing metrics, and consider MFA for privileged accounts.
-
-> The remedy module is practitioner decision support, not a diagnosis or prescription. It does not validate homeopathy as effective treatment for disease, and conventional medical evaluation should not be delayed for urgent symptoms.
-
-
-## Expert-verified alphabetical medicine master (release 1.0)
-
-This version integrates the owner's expert-verified **881-entry** medicine dictionary.
-Two-letter-prefix codes such as AB1 (Abies Canadensis), AB2 (Abies Nigra) and BE1 (Belladonna)
-are the primary identifiers. Existing B-series references remain historical aliases,
-**not** replacement document IDs. Never reuse or renumber an assigned code.
-
-### One-time import (administrator)
-
-1. Merge/deploy this code and the Firestore rules + Functions. Sign in as an active administrator.
-2. In **Medicine codes**, select the downloaded
-   `homeopathy_verified_medicine_codes_firebase_staging.json` file.
-3. The browser validates **exactly 881** verified, unique code/name pairs.
-4. Check the explicit clinical-use authorization checkbox; select **Import 881 approved medicines**.
-5. Wait for the server result. The callable validates permissions, entries and all existing
-   mappings before writing. It imports in Firestore batches. If interrupted after a batch,
-   retry with the same file; matching codes are reapproved and never remapped.
-6. Verify the registry displays 881 approved entries. No import occurs at build time,
-   and the JSON file should not be committed to the public repository by default.
-
-The staging export's original `active:false` flags reflect the earlier pre-authorization
-state; the administrator's separate authorization activates verified codes during this
-specific import. Manual additions require explicit expert and clinical-use confirmation.
-
-**Safety and audit:** Only server-side admin callables can create, import or archive
-medicine mappings. Direct Firestore client writes are denied. Historical names are immutable
-and archived codes cannot be prescribed. Prescriptions are now issued through a doctor-only
-callable that checks patient assignment and every selected code's live approval status.
-The medicine names remain available for authenticated clinician/dispensing lookup.
-Patient-facing documents must still meet applicable disclosure, labelling and dispensing law.
-
-The previous app release, patient sharing, and any legacy owner-scoped patient records
-must be migrated before using this version with real patient data. Complete privacy,
-medicine quality, storage and record-retention checks before production.
-
-
-### Production record integrity and fixed release
-
-- The 881-entry v1 medicine list is **fingerprint-pinned** (SHA-256 of sorted code, name and legacy mappings). Tampered or accidentally changed files are refused even if they claim the same release version.
-- The importer validates all codes before writing and rechecks each batch transactionally; archived codes cannot be reactivated by importing the release again.
-- Patient care-team assignments are only changed through the validated server callable. Admin direct Firestore changes to `doctorIds` are denied.
-- Clinical notes, prescriptions, follow-ups and suggestions are append-only from the client. Prescriptions cannot be deleted; authors/administrators may **void** with a recorded reason through a privileged callable.
-- Before prescribing, the doctor must attest that allergies, current medicines and disclosure/dispensing requirements were reviewed. This is a **manual check**, not automated drug-interaction checking.
-
-
-## Production rollout
-
-Before serving clinical patient data, complete every gate in [PRODUCTION_RELEASE.md](PRODUCTION_RELEASE.md). Run the legacy-patient audit **before** deploying the new Firestore rules; deploy from main only through the manually confirmed protected production workflow.
-
-**New prescriptions** require the medicine's approved code, potency/strength, dosage form and directions. Earlier historical prescriptions without these newer fields remain readable. Dosage confirmation is the responsibility of the prescribing professional; the app does not calculate or validate therapeutic doses or adverse interactions.
-
-Production callable functions enforce Firebase App Check. Provision a reCAPTCHA Enterprise site key, register the application and hosting domain, and set `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` before the production deployment; missing/invalid tokens are refused. Configure Firestore and Cloud Storage App Check enforcement separately in the Firebase console after observing impact in staging.
-
-The patient-facing print header uses `VITE_CLINIC_NAME`, `VITE_CLINIC_ADDRESS`, and `VITE_CLINIC_CONTACT`. Production deployment requires a configured clinic name and address, not a generic demo heading. Capture and verify licensed prescriber registration details as applicable before treating printed prescriptions as legally complete.
+Important: this is not a validated medical decision support, medication
+interaction checking or pharmacy record system. Patient copies now display
+both the clinic code and the full medicine name to support safer identification.
+Homeopathy should not delay necessary evidence-based care.
