@@ -15,6 +15,7 @@ import {
   deleteDoc,
   setDoc,
   updateDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 
 let testEnv: RulesTestEnvironment;
@@ -146,15 +147,9 @@ describe('clinic role and patient-sharing security rules', () => {
     await seedPatient('patient-a', ['saurabh']);
 
     const admin = testEnv.authenticatedContext('admin').firestore();
-    await assertFails(updateDoc(doc(admin, 'patients/patient-a'), {
+    await assertSucceeds(updateDoc(doc(admin, 'patients/patient-a'), {
       doctorIds: ['saurabh', 'gaurav'],
     }));
-    // Validated callable writes as Admin SDK; disabled rules simulate that route.
-    await testEnv.withSecurityRulesDisabled(async context => {
-      await updateDoc(doc(context.firestore(), 'patients/patient-a'), {
-        doctorIds: ['saurabh', 'gaurav'],
-      });
-    });
 
     const gaurav = testEnv.authenticatedContext('gaurav').firestore();
     await assertSucceeds(getDoc(doc(gaurav, 'patients/patient-a')));
@@ -238,7 +233,7 @@ describe('clinic role and patient-sharing security rules', () => {
       items: [{ code: 'B1', directions: '4 pills twice daily', quantity: '7 days' }],
     }));
 
-    // Direct Firestore writes cannot bypass the callable's approved-code checks.
+    // Older B-series codes are historical only; rules deny new B-series prescriptions.
     await assertFails(getDoc(doc(gaurav, 'patients/patient-a/prescriptions/rx-1')));
   });
 
@@ -277,12 +272,9 @@ describe('clinic role and patient-sharing security rules', () => {
     await seedPatient('patient-a', ['saurabh']);
 
     const admin = testEnv.authenticatedContext('admin').firestore();
-    await assertFails(updateDoc(doc(admin, 'patients/patient-a'), {
+    await assertSucceeds(updateDoc(doc(admin, 'patients/patient-a'), {
       doctorIds: ['saurabh', 'gaurav'],
     }));
-    await testEnv.withSecurityRulesDisabled(async context => {
-      await updateDoc(doc(context.firestore(), 'patients/patient-a'), {doctorIds: ['saurabh', 'gaurav']});
-    });
 
     const gaurav = testEnv.authenticatedContext('gaurav').firestore();
     await assertFails(updateDoc(doc(gaurav, 'patients/patient-a/cases/case-1'), {
@@ -310,5 +302,79 @@ describe('production append-only clinical audit rules', () => {
       await assertFails(deleteDoc(doc(client,'patients/patient-a/cases/case-1')));
       await assertFails(updateDoc(doc(client,'patients/patient-a/cases/case-1'),{notes:'silent rewrite'}));
     }
+  });
+});
+
+
+describe('Spark prescription validation without Cloud Functions', () => {
+  const path = 'patients/patient-a/prescriptions';
+  const approved = {
+    patientId:'patient-a',createdBy:'saurabh',issuedByName:'Dr Saurabh',
+    issuedAt:'2026-10-21',medicineCode:'BE1',clinicalReviewConfirmed:true,
+    createdAt:serverTimestamp(),patientInstructions:'',
+    items:[{code:'BE1',potency:'30C',dosageForm:'globules',directions:'clinician directions',quantity:'7 days'}],
+  };
+
+  async function seedMedicine(active=true,approvedForNewRx=true) {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(),'medicineCodes/BE1'),{
+        code:'BE1',remedyName:'Belladonna',active,approvedForNewRx,expertVerified:true,
+      });
+    });
+  }
+
+  it('allows one expert-approved medicine per Rx and permits audited voiding',async()=>{
+    await seedUser('saurabh','doctor');await seedPatient('patient-a',['saurabh']);
+    await seedMedicine();
+    const db=testEnv.authenticatedContext('saurabh').firestore();
+    const ref=doc(db,path+'/rx-1');
+    await assertSucceeds(setDoc(ref,approved));
+    await assertSucceeds(getDoc(ref));
+    await assertSucceeds(updateDoc(ref,{voidedAt:serverTimestamp(),voidedBy:'saurabh',voidReason:'Issued in error'}));
+    await assertFails(updateDoc(ref,{voidReason:'Changed reason'}));
+    await assertFails(deleteDoc(ref));
+  });
+
+  it('rejects unknown, inactive, unverified, legacy and multi-item prescriptions',async()=>{
+    await seedUser('saurabh','doctor');await seedPatient('patient-a',['saurabh']);
+    const db=testEnv.authenticatedContext('saurabh').firestore();
+    await seedMedicine();
+    await assertFails(setDoc(doc(db,path+'/legacy'),{...approved,medicineCode:'B1',items:[{...approved.items[0],code:'B1'}]}));
+    await assertFails(setDoc(doc(db,path+'/unknown'),{...approved,medicineCode:'ZZ999',items:[{...approved.items[0],code:'ZZ999'}]}));
+    await assertFails(setDoc(doc(db,path+'/two'),{...approved,items:[approved.items[0],approved.items[0]]}));
+    await assertFails(setDoc(doc(db,path+'/wrong-code'),{...approved,medicineCode:'BE1',items:[{...approved.items[0],code:'AB1'}]}));
+    await seedMedicine(false,true);
+    await assertFails(setDoc(doc(db,path+'/inactive'),approved));
+    await seedMedicine(true,false);
+    await assertFails(setDoc(doc(db,path+'/not-approved'),approved));
+    await seedMedicine(true,true);
+    await assertFails(setDoc(doc(db,path+'/missing-review'),{...approved,clinicalReviewConfirmed:false}));
+  });
+
+  it('rejects unassigned doctors and restricts voiding to prescriber or admin',async()=>{
+    await seedUser('saurabh','doctor');await seedUser('gaurav','doctor');await seedUser('admin','admin');
+    await seedPatient('patient-a',['saurabh','gaurav']);await seedMedicine();
+    const saurabh=testEnv.authenticatedContext('saurabh').firestore();
+    const gaurav=testEnv.authenticatedContext('gaurav').firestore();
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    await assertSucceeds(setDoc(doc(saurabh,path+'/rx-1'),approved));
+    await assertFails(updateDoc(doc(gaurav,path+'/rx-1'),{
+      voidedAt:serverTimestamp(),voidedBy:'gaurav',voidReason:'not the prescriber',
+    }));
+    await assertSucceeds(updateDoc(doc(admin,path+'/rx-1'),{
+      voidedAt:serverTimestamp(),voidedBy:'admin',voidReason:'clinic verification',
+    }));
+    await assertFails(setDoc(doc(admin,path+'/admin-rx'),{...approved,createdBy:'admin'}));
+  });
+
+  it('does not allow browser-side role editing or registry edits',async()=>{
+    await seedUser('admin','admin');await seedUser('saurabh','doctor');
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    const doctor=testEnv.authenticatedContext('saurabh').firestore();
+    await assertFails(setDoc(doc(admin,'users/newadmin'),{active:true,role:'admin'}));
+    await assertFails(updateDoc(doc(doctor,'users/saurabh'),{role:'admin'}));
+    await assertFails(setDoc(doc(admin,'medicineCodes/BE1'),{
+      code:'BE1',remedyName:'Belladonna',active:true,approvedForNewRx:true,expertVerified:true,
+    }));
   });
 });

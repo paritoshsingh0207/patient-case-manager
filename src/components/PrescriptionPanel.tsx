@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Firestore } from 'firebase/firestore';
-import type { Functions } from 'firebase/functions';
 import type { MedicineCode, Patient, PrescriptionItem, PrescriptionRecord } from '../types';
 import { subscribeMedicineCodes } from '../services/medicineService';
 import {
@@ -11,7 +10,6 @@ import {
 
 interface PrescriptionPanelProps {
   db: Firestore;
-  functions: Functions;
   patient: Patient;
   userId: string;
   practitionerName: string;
@@ -34,7 +32,6 @@ function emptyItem(): PrescriptionItem {
 
 export function PrescriptionPanel({
   db,
-  functions,
   patient,
   userId,
   practitionerName,
@@ -82,21 +79,16 @@ export function PrescriptionPanel({
     );
   }
 
-  function removeItem(index: number) {
-    setItems((current) => {
-      const next = current.filter((_, itemIndex) => itemIndex !== index);
-      return next.length ? next : [emptyItem()];
-    });
-  }
-
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     setMessage('');
 
     try {
-      await createPrescription(functions, {
+      await createPrescription(db, {
         patientId: patient.id,
+        userId,
+        issuedByName: practitionerName,
         issuedAt,
         items,
         patientInstructions,
@@ -124,7 +116,7 @@ export function PrescriptionPanel({
     if (!reason?.trim()) return;
     if (!window.confirm('Void this prescription permanently? A replacement requires a NEW prescription.')) return;
     try {
-      await voidPrescription(functions, {patientId: patient.id, prescriptionId: record.id, reason: reason.trim()});
+      await voidPrescription(db, {patientId: patient.id, prescriptionId: record.id, userId, reason: reason.trim()});
       setMessage('Prescription voided with an audit reason. Historical record retained.');
       setPrintable(null);
     } catch (error) {
@@ -149,7 +141,7 @@ export function PrescriptionPanel({
               Only active, expert-approved medicine codes can be prescribed. Keep full medicine identity available to authorized dispensers and patients as required.
             </p>
           </div>
-          <span className="status-pill">Code only</span>
+          <span className="status-pill">Spark · approved code</span>
         </div>
 
         {canPrescribe ? (
@@ -205,25 +197,12 @@ export function PrescriptionPanel({
                         placeholder="e.g. 7 days"
                       />
                     </label>
-                    <button
-                      className="button danger-text compact-button"
-                      type="button"
-                      onClick={() => removeItem(index)}
-                    >
-                      Remove
-                    </button>
                   </div>
                 );
               })}
             </div>
   
-            <button
-              className="button secondary add-line-button"
-              type="button"
-              onClick={() => setItems((current) => [...current, emptyItem()])}
-            >
-              + Add medicine
-            </button>
+            <p className="quiet-note">Save one medicine at a time. Each becomes a separate, auditable prescription entry.</p>
   
             <label>
               Patient instructions
@@ -305,7 +284,7 @@ export function PrescriptionPanel({
           <table>
             <thead>
               <tr>
-                <th>Medicine code</th>
+                <th>Medicine identification</th>
                 <th>Directions</th>
                 <th>Quantity / duration</th>
               </tr>
@@ -313,7 +292,7 @@ export function PrescriptionPanel({
             <tbody>
               {printable.items.map((item, index) => (
                 <tr key={`${item.code}-${index}`}>
-                  <td><strong>{item.code}</strong>{item.potency ? <span className="rx-dispensary-detail">{item.potency}</span> : null}{item.dosageForm ? <span className="rx-dispensary-detail">{item.dosageForm}</span> : null}</td>
+                  <td><strong>{item.code}</strong><span className="rx-dispensary-detail">{internalName(item.code) || 'Medicine identity requires verification'}</span>{item.potency ? <span className="rx-dispensary-detail">{item.potency}</span> : null}{item.dosageForm ? <span className="rx-dispensary-detail">{item.dosageForm}</span> : null}</td>
                   <td>{item.directions}</td>
                   <td>{item.quantity || '—'}</td>
                 </tr>
@@ -333,7 +312,7 @@ export function PrescriptionPanel({
               <span>Prescribed by</span>
               <strong>{printable.issuedByName}</strong>
             </div>
-            <p>Medicine names and dispensing details are available from the clinic on request.</p>
+            <p>Verify full medicine identity, preparation, strength and instructions before dispensing.</p>
           </footer>
         </section>
       ) : null}
