@@ -11,7 +11,8 @@ clinical/dispensing checks, backups, and release approval are required prior to 
 
 1. **Protect the production GitHub environment.** Repository Settings → Environments →
    production: require reviewer approval; restrict deployment branches to main.
-   Add Actions variables for all VITE_FIREBASE_* values, and the service account credential
+   Add Actions variables for all VITE_FIREBASE_* values, VITE_CLINIC_NAME,
+   VITE_CLINIC_ADDRESS, optional VITE_CLINIC_CONTACT, and the service account credential
    in FIREBASE_SERVICE_ACCOUNT secret. Prefer short-lived workload identity credentials
    over a persistent service-account key where supported. Restrict deployment identity to
    least necessary IAM privileges.
@@ -77,3 +78,5 @@ A successful GitHub Actions run verifies only the committed tests and TypeScript
 It does **not** verify legal compliance, disease efficacy, Firebase billing/quotas, production
 secrets, all data migrations, storage-rule emulator coverage, clinical labeling, pharmacy
 processes, penetration testing, or live browser/print behavior.
+
+**Print sign-off:** Set the real clinic name, physical address and optional phone/email in GitHub Actions variables, then verify the printed header, prescriber credentials and local legal labeling requirements in staging. The application does not invent registration/licensing numbers.

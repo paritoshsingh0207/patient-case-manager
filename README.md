@@ -83,8 +83,8 @@ Firestore Security Rules enforce the same behavior even if somebody bypasses the
 Medicine names live in the internal registry:
 
 ```text
-medicineCodes/B1
-  code: "B1"
+medicineCodes/BE1
+  code: "BE1"
   remedyName: "Belladonna"
   active: true
 ```
@@ -97,12 +97,12 @@ patients/{patientId}/prescriptions/{prescriptionId}
   issuedByName: "Dr Saurabh"
   issuedAt: "2026-10-19"
   items:
-    - code: "B1"
+    - code: "BE1"
       directions: "4 pills twice daily"
       quantity: "7 days"
 ```
 
-The doctor sees **B1 — Belladonna** while composing the prescription. The print stylesheet hides the application UI and prints only:
+The doctor sees **BE1 — Belladonna** while composing the prescription. The print stylesheet hides the application UI and prints only:
 
 - patient identity;
 - prescription date/reference;
@@ -342,3 +342,5 @@ Before serving clinical patient data, complete every gate in [PRODUCTION_RELEASE
 **New prescriptions** require the medicine's approved code, potency/strength, dosage form and directions. Earlier historical prescriptions without these newer fields remain readable. Dosage confirmation is the responsibility of the prescribing professional; the app does not calculate or validate therapeutic doses or adverse interactions.
 
 Production callable functions enforce Firebase App Check. Provision a reCAPTCHA Enterprise site key, register the application and hosting domain, and set `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` before the production deployment; missing/invalid tokens are refused. Configure Firestore and Cloud Storage App Check enforcement separately in the Firebase console after observing impact in staging.
+
+The patient-facing print header uses `VITE_CLINIC_NAME`, `VITE_CLINIC_ADDRESS`, and `VITE_CLINIC_CONTACT`. Production deployment requires a configured clinic name and address, not a generic demo heading. Capture and verify licensed prescriber registration details as applicable before treating printed prescriptions as legally complete.

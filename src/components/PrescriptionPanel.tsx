@@ -18,6 +18,10 @@ interface PrescriptionPanelProps {
   canPrescribe: boolean;
 }
 
+const clinicName = import.meta.env.VITE_CLINIC_NAME?.trim() || 'Clinic';
+const clinicAddress = import.meta.env.VITE_CLINIC_ADDRESS?.trim() || '';
+const clinicContact = import.meta.env.VITE_CLINIC_CONTACT?.trim() || '';
+
 function localDate() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
@@ -284,8 +288,10 @@ export function PrescriptionPanel({
         <section className="prescription-print" aria-hidden="true">
           <header>
             <div>
-              <strong>Patient Case Manager</strong>
+              <strong>{clinicName}</strong>
               <span>Prescription</span>
+              {clinicAddress ? <small className="print-clinic-meta">{clinicAddress}</small> : null}
+              {clinicContact ? <small className="print-clinic-meta">{clinicContact}</small> : null}
             </div>
             <div className="print-rx">Rx</div>
           </header>

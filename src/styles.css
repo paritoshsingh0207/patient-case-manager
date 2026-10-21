@@ -2532,3 +2532,5 @@ label {
 .prescription-item-editor .compact-button {justify-self:start}
 .rx-dispensary-detail {display:block;font-size:10px;line-height:1.5;color:inherit}
 @media(max-width:720px){.prescription-item-editor {grid-template-columns:1fr}}
+
+.print-clinic-meta {display:block;font-size:10px;line-height:1.5;font-weight:500;overflow-wrap:anywhere}

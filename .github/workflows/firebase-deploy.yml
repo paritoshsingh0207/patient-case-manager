@@ -30,6 +30,9 @@ jobs:
       VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
       VITE_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ vars.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY }}
       VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
+      VITE_CLINIC_NAME: ${{ vars.VITE_CLINIC_NAME }}
+      VITE_CLINIC_ADDRESS: ${{ vars.VITE_CLINIC_ADDRESS }}
+      VITE_CLINIC_CONTACT: ${{ vars.VITE_CLINIC_CONTACT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,7 +45,7 @@ jobs:
           java-version: '21'
       - name: Confirm complete Firebase web configuration
         run: |
-          for key in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID VITE_RECAPTCHA_ENTERPRISE_SITE_KEY; do
+          for key in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID VITE_RECAPTCHA_ENTERPRISE_SITE_KEY VITE_CLINIC_NAME VITE_CLINIC_ADDRESS; do
             if [[ -z "${!key}" ]]; then
               echo "::error::Missing required GitHub Actions variable: $key"
               exit 1
