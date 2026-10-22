@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ClinicIcon, type ClinicIconName } from './components/ClinicIcon';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, sendEmailVerification, reload, type User } from 'firebase/auth';
 import type {
   CaseInput,
   CaseRecord,
@@ -17,6 +17,7 @@ import { AdminConsole } from './components/AdminConsole';
 import { MedicineCodeManager } from './components/MedicineCodeManager';
 import { PrescriptionPanel } from './components/PrescriptionPanel';
 import { hasWorkspaceAccess, matchesLoginRole, subscribePractitionerAccess, type LoginRole } from './services/accessService';
+import {createPendingDoctorProfile} from './services/registrationService';
 import {
   createCase,
   createPatient,
@@ -53,6 +54,7 @@ function viewTitle(view: WorkspaceView) {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loginRole, setLoginRole] = useState<LoginRole | null>(null);
+  const [verificationRefresh, setVerificationRefresh] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessProfile, setAccessProfile] = useState<PractitionerAccess | null>(null);
@@ -107,7 +109,8 @@ export default function App() {
     );
   }, [user]);
 
-  const authorized = hasWorkspaceAccess(accessProfile);
+  const authorized = hasWorkspaceAccess(accessProfile, user?.emailVerified === true);
+  void verificationRefresh;
 
   useEffect(() => {
     if (!user || !db || !authorized || !accessProfile) {
@@ -170,15 +173,20 @@ export default function App() {
   const activeDb = db;
 
   if (!user) {
-    return <AuthPanel auth={activeAuth} onBeginSignIn={setLoginRole} />;
+    return <AuthPanel auth={activeAuth} db={activeDb} onBeginSignIn={setLoginRole} />;
   }
 
   if (accessLoading || !accessChecked) {
     return <GateLoader message="Verifying application access…" />;
   }
 
-  if (!authorized || !accessProfile) {
-    return <AccessDenied email={user.email} onSignOut={() => signOut(activeAuth)} />;
+  if (!accessProfile) {
+    return <CompleteDoctorRegistration user={user} db={activeDb} onSignOut={() => signOut(activeAuth)} />;
+  }
+  if (!authorized) {
+    return <AccountStatus user={user} profile={accessProfile}
+      onRefreshed={()=>setVerificationRefresh(v=>v+1)}
+      onSignOut={() => signOut(activeAuth)} />;
   }
   if (!matchesLoginRole(accessProfile, loginRole)) {
     return <RoleMismatch selected={loginRole!} onSignOut={async () => {
@@ -244,7 +252,7 @@ export default function App() {
         <div className="workspace-utility">
           <div className="clinic-heading">
             <span className="clinic-identity">{import.meta.env.VITE_CLINIC_NAME?.trim() || 'Clinical Workspace'}</span>
-            <span className="clinic-context">Private clinical records · {new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',year:'numeric'}).format(new Date())}</span>
+            <span className="clinic-context">{new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',year:'numeric'}).format(new Date())}</span>
           </div>
           <div className="workspace-account">
             <span className="role-pill">{isAdmin?'Administrator':'Doctor'}</span>
@@ -257,7 +265,7 @@ export default function App() {
         <main className="main-area">
           <header className="topbar">
             <div>
-              <p className="eyebrow">{isAdmin ? 'CLINIC ADMINISTRATION' : 'PRACTITIONER WORKSPACE'}</p>
+              <p className="eyebrow">{isAdmin ? 'Administration' : 'Doctor'}</p>
               <h1>{viewTitle(activeView)}</h1>
               <p className="topbar-subtitle">
                 {activeView==='overview' ? 'A clear view of your clinic records and everyday work.'
@@ -331,8 +339,7 @@ function ClinicOverview({patients,cases,selectedPatient,isAdmin,onOpenPatient,on
   const recent=[...patients].sort((a,b)=>(b.createdAt?.getTime()??0)-(a.createdAt?.getTime()??0)).slice(0,6);
   const assignments=patients.reduce((n,p)=>n+p.doctorIds.length,0);
   return <div className="clinic-overview">
-    <div className="overview-intro"><div><p className="eyebrow">PATIENT CARE</p><h2>Welcome to your workspace</h2>
-      <p>Your clinical records and patient directory are available in one place.</p></div>
+    <div className="overview-intro"><div><h2>Patients</h2></div>
       <button type="button" className="button primary" onClick={onAddPatient}><ClinicIcon name="plus"/> New patient</button>
     </div>
     <div className="overview-stats">
@@ -358,7 +365,7 @@ function ClinicOverview({patients,cases,selectedPatient,isAdmin,onOpenPatient,on
         </div>
       </section>
       <aside className="workspace-card glass-panel overview-quick">
-        <p className="eyebrow">QUICK ACTIONS</p><h3>Work efficiently</h3>
+        <h3>Actions</h3>
         <button type="button" onClick={onShowPatients}><span><ClinicIcon name="search"/></span>
           <div><strong>Find a patient</strong><small>Browse case histories and records</small></div><ClinicIcon name="chevron"/></button>
         <button type="button" onClick={onAddPatient}><span><ClinicIcon name="plus"/></span>
@@ -562,6 +569,70 @@ function GateLoader({ message }: { message: string }) {
       </div>
     </div>
   );
+}
+
+function AccountStatus({user,profile,onRefreshed,onSignOut}:{
+  user:User;profile:PractitionerAccess;onRefreshed:()=>void;onSignOut:()=>void|Promise<void>;
+}) {
+  const [feedback,setFeedback]=useState('');
+  const [working,setWorking]=useState(false);
+  async function resendVerification() {
+    setWorking(true);setFeedback('');
+    try {await sendEmailVerification(user);setFeedback('Verification email sent. Check your inbox.');}
+    catch {setFeedback('Unable to send the email. Try again later.');}
+    finally{setWorking(false);}
+  }
+  async function checkVerification() {
+    setWorking(true);setFeedback('');
+    try {
+      await reload(user);
+      await user.getIdToken(true);
+      onRefreshed();
+      if(!user.emailVerified)setFeedback('Email has not been verified yet.');
+    }catch{setFeedback('Could not check email verification.');}
+    finally{setWorking(false);}
+  }
+  const needsEmail=profile.emailVerificationRequired && !user.emailVerified;
+  return <main className="access-shell"><section className="access-card glass-panel">
+    <div className="brand-mark">PCM</div>
+    <h1>{!profile.active?'Account pending approval':'Verify your email'}</h1>
+    <p>{!profile.active
+      ? 'Your account is awaiting administrator approval.'
+      : 'Verify your email address to access your account.'}</p>
+    {needsEmail?<><p>A verification link was sent to {user.email}.</p>
+      <div className="account-status-actions">
+        <button type="button" className="button secondary" disabled={working} onClick={resendVerification}>Resend verification</button>
+        <button type="button" className="button secondary" disabled={working} onClick={checkVerification}>I've verified my email</button>
+      </div>
+    </>:null}
+    {feedback?<p role="status">{feedback}</p>:null}
+    <button className="button primary" type="button" onClick={onSignOut}>Sign out</button>
+  </section></main>;
+}
+
+function CompleteDoctorRegistration({user,db,onSignOut}:{
+  user:User;db:NonNullable<typeof import('./lib/firebase').db>;onSignOut:()=>void|Promise<void>;
+}) {
+  const [fullName,setFullName]=useState(user.displayName||'');
+  const [message,setMessage]=useState('');
+  const [working,setWorking]=useState(false);
+  async function submit(event:import('react').FormEvent) {
+    event.preventDefault();setWorking(true);setMessage('');
+    try { await createPendingDoctorProfile(db,user,fullName); }
+    catch(e){setMessage(e instanceof Error?e.message:'Unable to submit registration.');}
+    finally{setWorking(false);}
+  }
+  return <main className="access-shell"><section className="access-card glass-panel">
+    <div className="brand-mark">PCM</div>
+    <h1>Complete doctor registration</h1>
+    <form onSubmit={submit} className="stack-form">
+      <label>Full name<input required minLength={2} maxLength={120} value={fullName}
+        onChange={e=>setFullName(e.target.value)} autoComplete="name"/></label>
+      {message?<div className="inline-error" role="alert">{message}</div>:null}
+      <button className="button primary" type="submit" disabled={working}>Submit for approval</button>
+    </form>
+    <button type="button" className="button text" onClick={onSignOut}>Sign out</button>
+  </section></main>;
 }
 
 function RoleMismatch({selected,onSignOut}:{selected:LoginRole;onSignOut:()=>void|Promise<void>}) {
