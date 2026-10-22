@@ -397,7 +397,8 @@ describe('Spark admin doctor management, role immutability and revocation',()=>{
     await seedUser('admin','admin');await seedUser('outsider','doctor');
     const a=testEnv.authenticatedContext('admin').firestore();
     const d=testEnv.authenticatedContext('outsider').firestore();
-    await assertFails(setDoc(doc(a,'users/new-admin-uid'),{...makeProfile('new-admin-uid'),role:'admin'}));
+    // Authorized administrators may now add other administrators through the UI.
+    await assertSucceeds(setDoc(doc(a,'users/new-admin-uid'),{...makeProfile('new-admin-uid'),role:'admin'}));
     await assertFails(updateDoc(doc(a,'users/outsider'),{role:'admin'}));
     await assertFails(updateDoc(doc(d,'users/outsider'),{role:'admin',active:true}));
     await assertFails(setDoc(doc(a,'users/doctor-uid-0003'),{...makeProfile('doctor-uid-0003'),isAdmin:true}));
