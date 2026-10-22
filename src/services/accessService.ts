@@ -35,6 +35,12 @@ export function subscribePractitionerAccess(
   );
 }
 
+export type LoginRole = 'admin' | 'doctor';
+/** The login selector never grants permissions; Firestore decides the real role. */
+export function matchesLoginRole(profile: PractitionerAccess | null, selected: LoginRole | null) {
+  return selected === null || profile?.role === selected;
+}
+
 export function hasWorkspaceAccess(profile: PractitionerAccess | null) {
   return Boolean(profile?.active && (profile.role === 'doctor' || profile.role === 'admin'));
 }
