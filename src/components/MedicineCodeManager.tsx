@@ -20,16 +20,15 @@ export function MedicineCodeManager({ db, canManage }: MedicineCodeManagerProps)
   return <section className="workspace-card glass-panel medicine-manager">
     <div className="section-heading">
       <div>
-        <p className="eyebrow">Spark plan · authenticated medicine dictionary</p>
+        <p className="eyebrow">Medicine registry</p>
         <h2>Expert-verified medicine registry</h2>
         <p className="section-copy">Only approved alphabetical codes are prescribed. Historical B-series codes remain available for lookup and are never reused.</p>
       </div>
       <span className="status-pill">{approvedCount} approved / {codes.length} total</span>
     </div>
     {canManage ? <div className="admin-readonly-note">
-      <strong>Registry changes are offline-only on Spark.</strong>
-      <p>Run the local, authenticated administrator script <code>functions/scripts/import-verified-medicines.cjs</code> to import the approved 881-entry JSON file.
-      The browser cannot create, rename, reactivate, or delete medicine-code mappings.</p>
+      <strong>Medicine registry updates are managed by the clinic administrator.</strong>
+      <p>Contact the system administrator to import or update the medicine registry.</p>
     </div> : null}
     <div className="medicine-search">
       <span aria-hidden="true">⌕</span>

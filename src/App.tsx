@@ -48,7 +48,7 @@ function viewTitle(view: WorkspaceView) {
   if (view === 'medicines') return 'Medicine registry';
   if (view === 'admin') return 'Clinic administration';
   if (view === 'patients') return 'Patients';
-  return 'Clinic overview';
+  return 'Overview';
 }
 
 export default function App() {
@@ -268,10 +268,10 @@ export default function App() {
               <p className="eyebrow">{isAdmin ? 'Administration' : 'Doctor'}</p>
               <h1>{viewTitle(activeView)}</h1>
               <p className="topbar-subtitle">
-                {activeView==='overview' ? 'A clear view of your clinic records and everyday work.'
-                  : activeView==='patients' ? (isAdmin ? 'Review clinic patients and care teams.' : 'Only patients assigned to you appear here.')
-                  : activeView==='medicines' ? 'Find approved codes and verify historical medicine identities.'
-                  : 'Manage authorized practitioners and patient access.'}
+                {activeView==='overview' ? ''
+                  : activeView==='patients' ? (isAdmin ? 'Review clinic patients and care teams.' : 'Assigned patients')
+                  : activeView==='medicines' ? 'Medicine lookup'
+                  : 'User management'}
               </p>
             </div>
             {activeView==='patients' ? <button className="button primary" onClick={()=>setShowPatientForm(true)}>

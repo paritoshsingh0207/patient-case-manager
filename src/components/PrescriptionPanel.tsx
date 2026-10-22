@@ -135,13 +135,13 @@ export function PrescriptionPanel({
       <section className="workspace-card glass-panel prescription-panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Patient-facing codes</p>
+            <p className="eyebrow">Prescriptions</p>
             <h2>Prescription</h2>
             <p className="section-copy">
               Only active, expert-approved medicine codes can be prescribed. Keep full medicine identity available to authorized dispensers and patients as required.
             </p>
           </div>
-          <span className="status-pill">Spark · approved code</span>
+          <span className="status-pill">Prescription</span>
         </div>
 
         {canPrescribe ? (
