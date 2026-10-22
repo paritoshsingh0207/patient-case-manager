@@ -2752,3 +2752,148 @@ label{font-size:12px;color:#526072;font-weight:600;}
 @media print{
  .workspace-utility,.sidebar,.mobile-nav,.patient-tabs{display:none!important;}
 }
+
+
+/* Explicit Admin / Doctor sign-in, and Spark-safe doctor management */
+.auth-role-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  margin-top: 25px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f1f3ee;
+}
+.auth-role-switch button {
+  min-height: 45px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #65717c;
+  cursor: pointer;
+  font: 650 13px/1.2 "Instrument Sans", system-ui, sans-serif;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.auth-role-switch button:hover:not(:disabled) { color: #253244; }
+.auth-role-switch button.selected {
+  background: #fffefb;
+  color: #28766d;
+  box-shadow: 0 1px 4px rgba(28,49,57,.1);
+}
+.auth-role-switch button:focus-visible, .admin-status-button:focus-visible {
+  outline: 2px solid #347f78;
+  outline-offset: 2px;
+}
+.auth-role-switch button:disabled { opacity:.6;cursor:default; }
+.auth-helper { margin: 15px 0 23px; }
+.admin-doctor-heading { align-items:flex-start; flex-wrap:wrap; }
+.admin-doctor-heading .button { flex-shrink:0; }
+.admin-doctor-summary {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:9px;
+  margin-top:18px;
+}
+.admin-doctor-summary>div {
+  padding:15px;
+  background:#f8faf6;
+  border:1px solid var(--line);
+  border-radius:8px;
+  display:grid;
+  gap:4px;
+}
+.admin-doctor-summary strong {
+  color:var(--ink);
+  font:500 27px/1.1 "Newsreader",Georgia,serif;
+}
+.admin-doctor-summary span {font-size:10px;color:var(--muted);}
+.admin-add-doctor {
+  margin:20px 0;
+  padding:18px;
+  background:#f8faf7;
+  border:1px solid var(--line);
+  border-radius:8px;
+  display:grid;
+  gap:14px;
+}
+.admin-add-doctor h3 { margin:0;font-size:22px; }
+.admin-add-doctor .section-copy {margin:0;}
+.admin-add-doctor .section-copy a {color:#24756d;text-decoration:underline;}
+.admin-add-doctor label {min-width:0;}
+.admin-add-doctor .button {justify-self:start;}
+.admin-verify-account {
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  font-size:12px;
+  font-weight:500;
+  line-height:1.6;
+  color:var(--ink-soft);
+}
+.admin-verify-account input {
+  width:18px;
+  height:18px;
+  margin:1px 0 0;
+  flex-shrink:0;
+  padding:0;
+  accent-color:#347f78;
+}
+.admin-doctor-filters {
+  display:flex;
+  gap:9px;
+  margin-top:20px;
+}
+.admin-doctor-filters input {flex:1;min-width:0;}
+.admin-doctor-filters select {width:130px;flex:0 0 130px;}
+.admin-doctor-row {
+  grid-template-columns:40px minmax(0,1fr) auto auto;
+  background:#fffefb;
+  border-color:var(--line);
+  border-radius:8px;
+  padding:12px;
+}
+.admin-doctor-row .avatar {width:37px;height:37px;}
+.admin-doctor-identity {
+  display:grid;
+  gap:3px;
+  min-width:0;
+}
+.admin-doctor-identity strong,.admin-doctor-identity span,.admin-doctor-identity small {
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.admin-doctor-identity strong {font-size:12px;color:var(--ink);}
+.admin-doctor-identity span {font-size:11px;color:var(--muted);}
+.admin-doctor-identity small {font-size:10px;color:#7c8e95;}
+.doctor-status {font-size:10px;font-weight:650;letter-spacing:0;padding:6px 9px;}
+.doctor-status.inactive {background:#f3efec;color:#8c746b;}
+.admin-status-button {min-height:33px;font-size:11px;padding:0 9px;}
+.admin-status-button.danger-text {
+  border:1px solid #ecd2ce;
+  color:#a45042;
+  background:#fff9f7;
+}
+.admin-status-button.danger-text:hover:not(:disabled) {background:#fff0eb;}
+.admin-safety-hint {
+  margin:16px 0 0;
+  font-size:11px;
+  line-height:1.55;
+  color:#657580;
+}
+.admin-message {grid-column:1/-1;}
+@media (max-width:680px) {
+  .admin-doctor-heading {gap:14px;}
+  .admin-doctor-heading .button {width:100%;}
+  .admin-doctor-row {grid-template-columns:37px minmax(0,1fr) auto;row-gap:10px;}
+  .admin-status-button {grid-column:2/4;justify-self:start;}
+  .access-doctor-grid {grid-template-columns:1fr;}
+}
+@media (max-width:430px) {
+  .admin-doctor-summary {gap:6px;}
+  .admin-doctor-summary>div {padding:10px;}
+  .admin-doctor-filters {display:grid;grid-template-columns:1fr;}
+  .admin-doctor-filters select {width:100%;}
+}
