@@ -403,15 +403,18 @@ describe('Spark admin doctor management, role immutability and revocation',()=>{
   });
   it('admin can deactivate/reactivate a doctor, but not change immutable identity fields',async()=>{
     await seedUser('admin','admin');await seedUser('outsider','doctor');
+    await seedPatient('patient-a',['outsider']);
     const a=testEnv.authenticatedContext('admin').firestore();
     const d=testEnv.authenticatedContext('outsider').firestore();
     const ref=doc(a,'users/outsider');
+    await assertSucceeds(getDoc(doc(d,'patients/patient-a')));
     await assertSucceeds(updateDoc(ref,{active:false,updatedAt:serverTimestamp(),statusUpdatedBy:'admin'}));
-    await assertFails(getDoc(doc(d,'patients/no-patient')));
+    await assertFails(getDoc(doc(d,'patients/patient-a')));
     await assertFails(updateDoc(ref,{displayName:'Altered Doctor'}));
     await assertFails(updateDoc(ref,{active:true,role:'admin',updatedAt:serverTimestamp(),statusUpdatedBy:'admin'}));
     await assertFails(updateDoc(doc(d,'users/outsider'),{active:true,updatedAt:serverTimestamp(),statusUpdatedBy:'outsider'}));
     await assertSucceeds(updateDoc(ref,{active:true,updatedAt:serverTimestamp(),statusUpdatedBy:'admin'}));
+    await assertSucceeds(getDoc(doc(d,'patients/patient-a')));
     await assertFails(deleteDoc(ref));
   });
 });
