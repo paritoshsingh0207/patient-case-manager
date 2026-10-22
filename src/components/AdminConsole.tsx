@@ -1,143 +1,142 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import type { Firestore } from 'firebase/firestore';
-import type { DoctorProfile, Patient } from '../types';
-import { registerDoctorProfile, setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
+import {useEffect,useMemo,useState,type FormEvent} from 'react';
+import type {FirebaseApp} from 'firebase/app';
+import type {Firestore} from 'firebase/firestore';
+import type {DoctorProfile,Patient,PractitionerAccess} from '../types';
+import {setDoctorActive,setPatientDoctors,subscribeAdmins,subscribeDoctors} from '../services/adminService';
+import {createAdministratorAccount} from '../services/adminProvisioningService';
 
-interface AdminConsoleProps {db:Firestore;patients:Patient[];adminUid:string;}
-export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
+interface Props {db:Firestore;patients:Patient[];adminUid:string;firebaseApp:FirebaseApp;}
+export function AdminConsole({db,patients,adminUid,firebaseApp}:Props) {
   const [doctors,setDoctors]=useState<DoctorProfile[]>([]);
-  const [message,setMessage]=useState('');
+  const [admins,setAdmins]=useState<PractitionerAccess[]>([]);
   const [error,setError]=useState('');
+  const [message,setMessage]=useState('');
   const [search,setSearch]=useState('');
-  const [statusFilter,setStatusFilter]=useState<'all'|'active'|'inactive'>('all');
-  const [showAdd,setShowAdd]=useState(false);
-  const [draft,setDraft]=useState({uid:'',displayName:'',email:''});
-  const [confirmedAuthUid,setConfirmedAuthUid]=useState(false);
-  const [creating,setCreating]=useState(false);
+  const [statusFilter,setStatusFilter]=useState<'all'|'pending'|'active'|'inactive'>('all');
   const [busyUid,setBusyUid]=useState<string|null>(null);
+  const [showAddAdmin,setShowAddAdmin]=useState(false);
+  const [creatingAdmin,setCreatingAdmin]=useState(false);
+  const [newAdmin,setNewAdmin]=useState({fullName:'',email:'',temporaryPassword:'',confirmation:''});
   const [selectedPatientId,setSelectedPatientId]=useState('');
   const [selectedDoctorIds,setSelectedDoctorIds]=useState<string[]>([]);
   const [savingAccess,setSavingAccess]=useState(false);
 
-  useEffect(()=>subscribeDoctors(db,setDoctors,err=>setError(err.message)),[db]);
-  const visibleDoctors=useMemo(()=>doctors.filter(d=>{
-    if(d.deleted)return false;
-    const match=!search.trim()||[d.displayName,d.email,d.uid].join(' ').toLowerCase().includes(search.trim().toLowerCase());
-    return match&&(statusFilter==='all'||(statusFilter==='active'?d.active:!d.active));
-  }),[doctors,search,statusFilter]);
-  const availableDoctors=useMemo(()=>doctors.filter(d=>!d.deleted),[doctors]);
-  const activeDoctors=availableDoctors.filter(d=>d.active);
-  const inactiveDoctors=availableDoctors.filter(d=>!d.active);
-  const selectedPatient=patients.find(x=>x.id===selectedPatientId)??null;
+  useEffect(()=>subscribeDoctors(db,setDoctors,e=>setError(e.message)),[db]);
+  useEffect(()=>subscribeAdmins(db,setAdmins,e=>setError(e.message)),[db]);
+  const registered=useMemo(()=>doctors.filter(d=>!d.deleted),[doctors]);
+  const pending=registered.filter(d=>d.pending);
+  const active=registered.filter(d=>d.active);
+  const inactive=registered.filter(d=>!d.active&&!d.pending);
+  const displayed=registered.filter(d=>{
+    const needle=search.trim().toLowerCase();
+    const matches=!needle||[d.displayName,d.email,d.uid].join(' ').toLowerCase().includes(needle);
+    const status=statusFilter==='all'||(statusFilter==='pending'&&d.pending)
+      ||(statusFilter==='active'&&d.active)||(statusFilter==='inactive'&&!d.active&&!d.pending);
+    return matches&&status;
+  }).sort((a,b)=>Number(Boolean(b.pending))-Number(Boolean(a.pending)));
+  const selectedPatient=patients.find(p=>p.id===selectedPatientId)??null;
   const assignedCounts=useMemo(()=>new Map(doctors.map(d=>[
     d.uid,patients.filter(p=>p.doctorIds.includes(d.uid)).length,
   ])),[doctors,patients]);
   useEffect(()=>{
-    if(!selectedPatientId||!patients.some(p=>p.id===selectedPatientId))setSelectedPatientId(patients[0]?.id??'');
+    if(!selectedPatientId||!patients.some(p=>p.id===selectedPatientId))
+      setSelectedPatientId(patients[0]?.id??'');
   },[patients,selectedPatientId]);
   useEffect(()=>setSelectedDoctorIds(selectedPatient?.doctorIds??[]),[selectedPatient]);
+  function clearMessages(){setMessage('');setError('');}
 
-  async function addDoctor(event:FormEvent) {
-    event.preventDefault();if(!confirmedAuthUid)return;
-    setCreating(true);setError('');setMessage('');
-    try {
-      await registerDoctorProfile(db,{...draft,adminUid});
-      setMessage('Doctor profile added. They can now sign in using their existing Firebase Authentication credentials.');
-      setDraft({uid:'',displayName:'',email:''});setConfirmedAuthUid(false);setShowAdd(false);
-    }catch(e){setError(e instanceof Error?e.message:'Could not add doctor profile. Check UID and existing records.');}
-    finally{setCreating(false);}
-  }
   async function changeStatus(doctor:DoctorProfile) {
-    if(!window.confirm(doctor.active
-      ? `Deactivate ${doctor.displayName}? They will lose access to patient records immediately. Existing assignments are retained until removed.`
-      : `Reactivate ${doctor.displayName}? Existing assigned patients may become accessible again immediately.`))return;
-    setBusyUid(doctor.uid);setMessage('');setError('');
-    try {
-      await setDoctorActive(db,{uid:doctor.uid,active:!doctor.active,adminUid});
-      setMessage(doctor.active?'Doctor access deactivated.':'Doctor access reactivated.');
-    }catch(e){setError(e instanceof Error?e.message:'Unable to change doctor access.');}
+    const next=!doctor.active;
+    const label=doctor.pending?'Approve and activate':next?'Reactivate':'Deactivate';
+    const warning=next
+      ?'This doctor will gain access to their assigned patients after email verification.'
+      :'The doctor will immediately lose access. Their records will be retained.';
+    if(!window.confirm(label+' '+doctor.displayName+'? '+warning))return;
+    clearMessages();setBusyUid(doctor.uid);
+    try{
+      await setDoctorActive(db,{uid:doctor.uid,active:next,adminUid});
+      setMessage(next?'Doctor account activated.':'Doctor account deactivated.');
+    }catch(e){setError(e instanceof Error?e.message:'Unable to update doctor account.');}
     finally{setBusyUid(null);}
   }
-  function toggle(uid:string){setSelectedDoctorIds(ids=>ids.includes(uid)?ids.filter(x=>x!==uid):[...ids,uid]);}
-  async function saveAccess() {
+
+  async function createAdmin(event:FormEvent) {
+    event.preventDefault();clearMessages();
+    if(newAdmin.temporaryPassword!==newAdmin.confirmation){setError('Passwords do not match.');return;}
+    if(!window.confirm('Create a new administrator account for '+newAdmin.email+'? This account will be able to manage all clinic data after email verification.'))return;
+    setCreatingAdmin(true);
+    try{
+      const result=await createAdministratorAccount(firebaseApp,db,{
+        fullName:newAdmin.fullName,email:newAdmin.email,
+        temporaryPassword:newAdmin.temporaryPassword,adminUid,
+      });
+      setMessage('Administrator created for '+result.email+'. '+(result.verificationSent
+        ?'A verification email was sent.':'They must request email verification on first login.'));
+      setNewAdmin({fullName:'',email:'',temporaryPassword:'',confirmation:''});
+      setShowAddAdmin(false);
+    }catch(e){setError(e instanceof Error?e.message:'Unable to create administrator account.');}
+    finally{setCreatingAdmin(false);}
+  }
+
+  function toggleDoctor(uid:string){
+    setSelectedDoctorIds(ids=>ids.includes(uid)?ids.filter(x=>x!==uid):[...ids,uid]);
+  }
+  async function saveAccess(){
     if(!selectedPatient)return;
-    const unknown=selectedDoctorIds.filter(uid=>!availableDoctors.some(d=>d.uid===uid));
-    if(unknown.length){setError('This patient has unknown doctor assignments. Verify them before saving.');return;}
-    setSavingAccess(true);setError('');setMessage('');
-    try {
+    const unknown=selectedDoctorIds.some(uid=>!registered.some(d=>d.uid===uid));
+    if(unknown){setError('An assigned doctor could not be found. Check this patient’s existing assignments first.');return;}
+    clearMessages();setSavingAccess(true);
+    try{
       await setPatientDoctors(db,{patientId:selectedPatient.id,doctorIds:selectedDoctorIds});
-      setMessage('Patient care-team access updated.');
-    }catch(e){setError(e instanceof Error?e.message:'Could not update patient access.');}
+      setMessage('Patient assignments saved.');
+    }catch(e){setError(e instanceof Error?e.message:'Unable to save assignments.');}
     finally{setSavingAccess(false);}
   }
 
   return <div className="admin-console">
     <section className="workspace-card glass-panel admin-section">
-      <div className="section-heading admin-doctor-heading">
-        <div><p className="eyebrow">CLINIC ACCESS</p><h2>Doctor management</h2>
-          <p className="section-copy">Add doctors, control access, and review their patient assignments.</p></div>
-        <button type="button" className="button primary" onClick={()=>setShowAdd(x=>!x)}>
-          {showAdd?'Cancel':' + Add doctor'}</button>
-      </div>
+      <div className="section-heading admin-doctor-heading"><div><h2>Doctors</h2>
+        <p className="section-copy">Review registrations and manage doctor access.</p></div></div>
       <div className="admin-doctor-summary">
-        <div><strong>{availableDoctors.length}</strong><span>Total doctors</span></div>
-        <div><strong>{activeDoctors.length}</strong><span>Active</span></div>
-        <div><strong>{inactiveDoctors.length}</strong><span>Inactive</span></div>
+        <div><strong>{pending.length}</strong><span>Pending approval</span></div>
+        <div><strong>{active.length}</strong><span>Active</span></div>
+        <div><strong>{inactive.length}</strong><span>Inactive</span></div>
       </div>
-      {showAdd?<form className="admin-add-doctor" onSubmit={addDoctor}>
-        <h3>Connect a doctor's login</h3>
-        <p className="section-copy">First create a separate Email/Password user in <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer">Firebase Console → Authentication → Users</a>. Copy the user's UID and verify it matches their email. This form links that existing account; it does not create a password.</p>
-        <label>Firebase Authentication UID
-          <input required minLength={6} maxLength={128} value={draft.uid}
-            onChange={e=>setDraft({...draft,uid:e.target.value})} placeholder="Paste exact UID from Firebase Authentication"/>
-        </label>
-        <label>Doctor's full name
-          <input required minLength={2} maxLength={120} value={draft.displayName}
-            onChange={e=>setDraft({...draft,displayName:e.target.value})} placeholder="Dr. Full Name"/>
-        </label>
-        <label>Doctor's Firebase login email
-          <input required type="email" value={draft.email}
-            onChange={e=>setDraft({...draft,email:e.target.value})} placeholder="doctor@clinic.com"/>
-        </label>
-        <label className="admin-verify-account">
-          <input type="checkbox" checked={confirmedAuthUid} onChange={e=>setConfirmedAuthUid(e.target.checked)}/>
-          <span>I verified that this UID and email belong to the intended doctor in Firebase Authentication.</span>
-        </label>
-        <button className="button primary" type="submit" disabled={creating||!confirmedAuthUid}>
-          {creating?'Adding…':'Activate doctor account'}</button>
-      </form>:null}
       <div className="admin-doctor-filters">
-        <input type="search" aria-label="Search doctors" value={search}
-          onChange={e=>setSearch(e.target.value)} placeholder="Search name, email or UID"/>
+        <input type="search" aria-label="Search doctors" placeholder="Search doctors"
+          value={search} onChange={e=>setSearch(e.target.value)}/>
         <select aria-label="Filter doctor status" value={statusFilter}
-          onChange={e=>setStatusFilter(e.target.value as 'all'|'active'|'inactive')}>
-          <option value="all">All doctors</option>
+          onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)}>
+          <option value="all">All statuses</option>
+          <option value="pending">Pending</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
       </div>
       <div className="doctor-list">
-        {visibleDoctors.map(doctor=><article className="doctor-row admin-doctor-row" key={doctor.uid}>
-          <div className="avatar">{doctor.displayName.slice(0,2).toUpperCase()}</div>
-          <div className="admin-doctor-identity"><strong>{doctor.displayName}</strong>
-            <span>{doctor.email}</span><small>{assignedCounts.get(doctor.uid)??0} assigned patient(s)</small></div>
-          <span className={'doctor-status '+(doctor.active?'':'inactive')}>{doctor.active?'Active':'Inactive'}</span>
-          <button type="button" className={'button secondary admin-status-button '+(doctor.active?'danger-text':'')}
-            onClick={()=>changeStatus(doctor)} disabled={busyUid===doctor.uid}>
-            {busyUid===doctor.uid?'Updating…':doctor.active?'Deactivate':'Reactivate'}
+        {displayed.map(d=><article className="doctor-row admin-doctor-row" key={d.uid}>
+          <div className="avatar">{d.displayName.slice(0,2).toUpperCase()}</div>
+          <div className="admin-doctor-identity">
+            <strong>{d.displayName}</strong><span>{d.email}</span>
+            <small>{assignedCounts.get(d.uid)??0} assigned patient(s)</small>
+          </div>
+          <span className={'doctor-status '+(d.active?'':d.pending?'pending':'inactive')}>
+            {d.active?'Active':d.pending?'Pending':'Inactive'}
+          </span>
+          <button className={'button secondary admin-status-button '+(d.active?'danger-text':'')}
+            type="button" disabled={busyUid===d.uid}
+            onClick={()=>changeStatus(d)}>
+            {busyUid===d.uid?'Saving…':d.active?'Deactivate':d.pending?'Activate doctor':'Reactivate'}
           </button>
         </article>)}
-        {!visibleDoctors.length?<div className="empty-list">
-          {search||statusFilter!=='all'?'No doctors match this filter.':'No doctors yet. Add an existing Firebase Authentication doctor account above.'}
+        {!displayed.length?<div className="empty-list">
+          {registered.length?'No matching doctors.':'No doctor registrations yet.'}
         </div>:null}
       </div>
-      <p className="admin-safety-hint">Deactivation immediately denies clinical access. Reactivation restores access to patients still assigned to that doctor. No clinical history is deleted.</p>
     </section>
     <section className="workspace-card glass-panel admin-section">
-      <div className="section-heading"><div><p className="eyebrow">PATIENT PERMISSIONS</p>
-        <h2>Care-team assignments</h2>
-        <p className="section-copy">Select a patient and choose which doctors can access their records.</p></div>
-      </div>
+      <div className="section-heading"><div><h2>Patient assignments</h2>
+        <p className="section-copy">Assign or remove doctors from a patient’s care team.</p></div></div>
       <label className="patient-access-select">Patient
         <select value={selectedPatientId} onChange={e=>setSelectedPatientId(e.target.value)}>
           <option value="">Select patient</option>
@@ -145,25 +144,58 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
         </select>
       </label>
       {selectedPatient?<><div className="access-doctor-grid">
-        {availableDoctors.map(doctor=>{
-          const assigned=selectedDoctorIds.includes(doctor.uid);
-          return <label className={'access-doctor-card '+(assigned?'selected':'')} key={doctor.uid}>
-            <input type="checkbox" checked={assigned} disabled={!doctor.active&&!assigned}
-              onChange={()=>toggle(doctor.uid)}/>
-            <span className="avatar">{doctor.displayName.slice(0,2).toUpperCase()}</span>
-            <span><strong>{doctor.displayName}{!doctor.active?' (inactive)':''}</strong><small>{doctor.email}</small></span>
+        {registered.map(d=>{
+          const chosen=selectedDoctorIds.includes(d.uid);
+          return <label className={'access-doctor-card '+(chosen?'selected':'')} key={d.uid}>
+            <input type="checkbox" checked={chosen} disabled={!d.active&&!chosen}
+              onChange={()=>toggleDoctor(d.uid)}/>
+            <span className="avatar">{d.displayName.slice(0,2).toUpperCase()}</span>
+            <span><strong>{d.displayName}{!d.active?' (inactive)':''}</strong>
+              <small>{d.email}</small></span>
           </label>;
         })}
       </div>
-      {!availableDoctors.length?<div className="empty-list">Add a doctor to assign patients.</div>:null}
-      {selectedDoctorIds.some(id=>!availableDoctors.some(d=>d.uid===id))?
-        <div className="inline-error" role="alert">This patient has older or unknown doctor assignments. Check them in Firestore before saving.</div>:null}
-      <div className="admin-actions">
-        <span className="quiet-note">{selectedDoctorIds.length} assigned doctor(s)</span>
-        <button type="button" className="button primary" disabled={savingAccess||selectedDoctorIds.length>20||
-          selectedDoctorIds.some(id=>!availableDoctors.some(d=>d.uid===id))} onClick={saveAccess}>
-          {savingAccess?'Saving…':'Save assignments'}</button>
-      </div></>:<div className="empty-list">Select a patient to manage access.</div>}
+      {selectedDoctorIds.some(uid=>!registered.some(d=>d.uid===uid))
+        ?<div className="inline-error" role="alert">This patient has unknown doctor assignments. Check those records before saving.</div>
+        :null}
+      <div className="admin-actions"><span className="quiet-note">{selectedDoctorIds.length} assigned</span>
+        <button className="button primary" type="button"
+          disabled={savingAccess||selectedDoctorIds.length>20||
+            selectedDoctorIds.some(uid=>!registered.some(d=>d.uid===uid))}
+          onClick={saveAccess}>{savingAccess?'Saving…':'Save assignments'}</button>
+      </div></>:<div className="empty-list">No patient selected.</div>}
+    </section>
+    <section className="workspace-card glass-panel admin-section admin-admin-section">
+      <div className="section-heading admin-doctor-heading">
+        <div><h2>Administrators</h2>
+          <p className="section-copy">Create and manage administrator login accounts.</p></div>
+        <button type="button" className="button secondary"
+          onClick={()=>setShowAddAdmin(x=>!x)}>{showAddAdmin?'Cancel':'Add administrator'}</button>
+      </div>
+      <div className="doctor-list">
+        {admins.map(a=><article className="doctor-row admin-doctor-row" key={a.uid}>
+          <div className="avatar">{(a.displayName||'A').slice(0,2).toUpperCase()}</div>
+          <div className="admin-doctor-identity"><strong>{a.displayName||'Administrator'}</strong>
+            <span>{a.email||'No email listed'}</span></div>
+          <span className={'doctor-status '+(a.active?'':'inactive')}>{a.active?'Active':'Inactive'}</span>
+        </article>)}
+      </div>
+      {showAddAdmin?<form className="admin-add-doctor" onSubmit={createAdmin}>
+        <h3>New administrator</h3>
+        <label>Full name<input required minLength={2} maxLength={120} autoComplete="off"
+          value={newAdmin.fullName} onChange={e=>setNewAdmin({...newAdmin,fullName:e.target.value})}/></label>
+        <label>Email address<input type="email" required autoComplete="off"
+          value={newAdmin.email} onChange={e=>setNewAdmin({...newAdmin,email:e.target.value})}/></label>
+        <label>Temporary password<input type="password" required minLength={12}
+          autoComplete="new-password" value={newAdmin.temporaryPassword}
+          onChange={e=>setNewAdmin({...newAdmin,temporaryPassword:e.target.value})}/></label>
+        <label>Confirm temporary password<input type="password" required minLength={12}
+          autoComplete="new-password" value={newAdmin.confirmation}
+          onChange={e=>setNewAdmin({...newAdmin,confirmation:e.target.value})}/></label>
+        <p className="section-copy">The new administrator will need to verify their email before accessing records. Share their temporary password privately and ask them to reset it.</p>
+        <button className="button primary" disabled={creatingAdmin} type="submit">
+          {creatingAdmin?'Creating…':'Create administrator'}</button>
+      </form>:null}
     </section>
     {error?<div className="inline-error admin-message" role="alert">{error}</div>:null}
     {message?<div className="save-message admin-message" role="status">{message}</div>:null}

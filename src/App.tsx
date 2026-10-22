@@ -9,7 +9,7 @@ import type {
   PractitionerAccess,
   SuggestionResult,
 } from './types';
-import { auth, db, firebaseReady } from './lib/firebase';
+import { app, auth, db, firebaseReady } from './lib/firebase';
 import { AuthPanel } from './components/AuthPanel';
 import { PatientForm } from './components/PatientForm';
 import { CaseEditor } from './components/CaseEditor';
@@ -319,6 +319,7 @@ export default function App() {
             db={activeDb}
             patients={patients}
             adminUid={activeUser.uid}
+            firebaseApp={app!}
           />
         ) : null}
         </main>
