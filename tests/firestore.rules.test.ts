@@ -378,3 +378,40 @@ describe('Spark prescription validation without Cloud Functions', () => {
     }));
   });
 });
+
+describe('Spark admin doctor management, role immutability and revocation',()=>{
+  const makeProfile=(uid:string,adminUid='admin')=>({
+    active:true,role:'doctor',displayName:'Dr Example',email:'doctor@example.com',
+    createdBy:adminUid,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
+    statusUpdatedBy:adminUid,
+  });
+  it('allows an active admin to register a doctor profile for an existing Auth UID',async()=>{
+    await seedUser('admin','admin');await seedUser('outsider','doctor');
+    const a=testEnv.authenticatedContext('admin').firestore();
+    const d=testEnv.authenticatedContext('outsider').firestore();
+    await assertSucceeds(setDoc(doc(a,'users/doctor-uid-0001'),makeProfile('doctor-uid-0001')));
+    await assertFails(setDoc(doc(d,'users/doctor-uid-0002'),makeProfile('doctor-uid-0002','outsider')));
+  });
+  it('blocks client-created admin profiles and role escalation',async()=>{
+    await seedUser('admin','admin');await seedUser('outsider','doctor');
+    const a=testEnv.authenticatedContext('admin').firestore();
+    const d=testEnv.authenticatedContext('outsider').firestore();
+    await assertFails(setDoc(doc(a,'users/new-admin-uid'),{...makeProfile('new-admin-uid'),role:'admin'}));
+    await assertFails(updateDoc(doc(a,'users/outsider'),{role:'admin'}));
+    await assertFails(updateDoc(doc(d,'users/outsider'),{role:'admin',active:true}));
+    await assertFails(setDoc(doc(a,'users/doctor-uid-0003'),{...makeProfile('doctor-uid-0003'),isAdmin:true}));
+  });
+  it('admin can deactivate/reactivate a doctor, but not change immutable identity fields',async()=>{
+    await seedUser('admin','admin');await seedUser('outsider','doctor');
+    const a=testEnv.authenticatedContext('admin').firestore();
+    const d=testEnv.authenticatedContext('outsider').firestore();
+    const ref=doc(a,'users/outsider');
+    await assertSucceeds(updateDoc(ref,{active:false,updatedAt:serverTimestamp(),statusUpdatedBy:'admin'}));
+    await assertFails(getDoc(doc(d,'patients/no-patient')));
+    await assertFails(updateDoc(ref,{displayName:'Altered Doctor'}));
+    await assertFails(updateDoc(ref,{active:true,role:'admin',updatedAt:serverTimestamp(),statusUpdatedBy:'admin'}));
+    await assertFails(updateDoc(doc(d,'users/outsider'),{active:true,updatedAt:serverTimestamp(),statusUpdatedBy:'outsider'}));
+    await assertSucceeds(updateDoc(ref,{active:true,updatedAt:serverTimestamp(),statusUpdatedBy:'admin'}));
+    await assertFails(deleteDoc(ref));
+  });
+});

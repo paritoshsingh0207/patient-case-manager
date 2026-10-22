@@ -310,6 +310,7 @@ export default function App() {
           <AdminConsole
             db={activeDb}
             patients={patients}
+            adminUid={activeUser.uid}
           />
         ) : null}
         </main>
