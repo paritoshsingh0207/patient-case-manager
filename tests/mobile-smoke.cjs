@@ -2,11 +2,13 @@
 'use strict';
 /* Browser-only mobile smoke run against Firebase Auth + Firestore emulators. */
 const {spawn}=require('node:child_process');
-const {initializeApp}=require('../functions/node_modules/firebase-admin/app');
-const {getAuth}=require('../functions/node_modules/firebase-admin/auth');
-const {getFirestore}=require('../functions/node_modules/firebase-admin/firestore');
-const {chromium}=require('playwright');
 const path=require('node:path');
+const {createRequire}=require('node:module');
+const functionRequire=createRequire(path.resolve(__dirname,'../functions/package.json'));
+const {initializeApp}=functionRequire('firebase-admin/app');
+const {getAuth}=functionRequire('firebase-admin/auth');
+const {getFirestore}=functionRequire('firebase-admin/firestore');
+const {chromium}=require('playwright');
 const fs=require('node:fs');
 
 const app=initializeApp({projectId:'demo-patient-case-manager'});
