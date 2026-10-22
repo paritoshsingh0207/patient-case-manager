@@ -46,7 +46,7 @@ async function login(page,role,email,password){
   await page.goto(base);
   await page.getByRole('button',{name:role,exact:true}).click();
   await page.getByLabel('Email',{exact:true}).fill(email);
-  await page.getByLabel('Password',{exact:true}).fill(password);
+  await page.locator('input[autocomplete="current-password"]').fill(password);
   await page.getByRole('button',{name:'Sign in as '+role}).click();
   await page.getByRole('heading',{name:'Overview',exact:true}).waitFor({timeout:25000});
 }
@@ -120,7 +120,7 @@ async function signOut(page){
   await checkWidth(page,'doctor registration');
   await page.getByLabel('Full name').fill('Dr New Applicant');
   await page.getByLabel('Email',{exact:true}).fill('applicant@clinic.test');
-  await page.getByLabel('Password',{exact:true}).fill('LongPassword#003');
+  await page.locator('input[autocomplete="new-password"]').first().fill('LongPassword#003');
   await page.getByLabel('Confirm password').fill('LongPassword#003');
   await page.getByRole('button',{name:'Register as Doctor'}).click();
   await page.getByRole('heading',{name:'Account pending approval'}).waitFor({timeout:25000});
