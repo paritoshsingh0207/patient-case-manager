@@ -80,8 +80,41 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
-      // Provisioning and deactivation use the offline Admin SDK script only.
-      allow create, update, delete: if false;
+      // Only an active administrator can link an existing Auth UID as a doctor.
+      allow create: if isAdmin()
+        && userId != request.auth.uid
+        && userId.matches('^[A-Za-z0-9_-]{6,128}$')
+        && request.resource.data.keys().hasOnly([
+          'role','active','displayName','email','createdBy',
+          'createdAt','updatedAt','statusUpdatedBy'])
+        && request.resource.data.keys().hasAll([
+          'role','active','displayName','email','createdBy',
+          'createdAt','updatedAt','statusUpdatedBy'])
+        && request.resource.data.role == 'doctor'
+        && request.resource.data.active == true
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 120
+        && request.resource.data.email is string
+        && request.resource.data.email.size() >= 5
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$')
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.statusUpdatedBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      // An admin may only activate/deactivate doctors, never edit roles or identities.
+      allow update: if isAdmin()
+        && resource.data.role in ['doctor','practitioner']
+        && resource.data.get('deleted',false) != true
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.active is bool
+        && request.resource.data.active != resource.data.active
+        && request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['active','updatedAt','statusUpdatedBy'])
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.statusUpdatedBy == request.auth.uid;
+      allow delete: if false;
     }
     match /patients/{patientId} {
       allow create: if isAdmin()

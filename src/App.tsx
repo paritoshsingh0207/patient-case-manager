@@ -16,7 +16,7 @@ import { CaseEditor } from './components/CaseEditor';
 import { AdminConsole } from './components/AdminConsole';
 import { MedicineCodeManager } from './components/MedicineCodeManager';
 import { PrescriptionPanel } from './components/PrescriptionPanel';
-import { hasWorkspaceAccess, subscribePractitionerAccess } from './services/accessService';
+import { hasWorkspaceAccess, matchesLoginRole, subscribePractitionerAccess, type LoginRole } from './services/accessService';
 import {
   createCase,
   createPatient,
@@ -52,6 +52,7 @@ function viewTitle(view: WorkspaceView) {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [loginRole, setLoginRole] = useState<LoginRole | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessProfile, setAccessProfile] = useState<PractitionerAccess | null>(null);
@@ -169,7 +170,7 @@ export default function App() {
   const activeDb = db;
 
   if (!user) {
-    return <AuthPanel auth={activeAuth} />;
+    return <AuthPanel auth={activeAuth} onBeginSignIn={setLoginRole} />;
   }
 
   if (accessLoading || !accessChecked) {
@@ -178,6 +179,11 @@ export default function App() {
 
   if (!authorized || !accessProfile) {
     return <AccessDenied email={user.email} onSignOut={() => signOut(activeAuth)} />;
+  }
+  if (!matchesLoginRole(accessProfile, loginRole)) {
+    return <RoleMismatch selected={loginRole!} onSignOut={async () => {
+      await signOut(activeAuth); setLoginRole(null);
+    }} />;
   }
 
   const activeUser = user;
@@ -304,6 +310,7 @@ export default function App() {
           <AdminConsole
             db={activeDb}
             patients={patients}
+            adminUid={activeUser.uid}
           />
         ) : null}
         </main>
@@ -555,6 +562,16 @@ function GateLoader({ message }: { message: string }) {
       </div>
     </div>
   );
+}
+
+function RoleMismatch({selected,onSignOut}:{selected:LoginRole;onSignOut:()=>void|Promise<void>}) {
+  return <main className="access-shell"><section className="access-card glass-panel">
+    <div className="brand-mark">PCM</div><p className="eyebrow">WRONG WORKSPACE</p>
+    <h1>This is not a {selected==='admin'?'clinic administrator':'doctor'} account.</h1>
+    <p>Sign-in succeeded but your verified Firebase role does not match the selected login.
+    Return to the login page and select the appropriate workspace.</p>
+    <button type="button" className="button primary" onClick={onSignOut}>Back to login selection</button>
+  </section></main>;
 }
 
 function AccessDenied({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
