@@ -11,6 +11,7 @@ function doctorFromDoc(snapshot:QueryDocumentSnapshot<DocumentData>):DoctorProfi
     displayName:typeof data.displayName==='string'?data.displayName:'Unnamed doctor',
     email:typeof data.email==='string'?data.email:'',
     deleted:data.deleted===true,
+    pending:data.active!==true&&data.createdBy===snapshot.id&&data.statusUpdatedBy===snapshot.id,
   };
 }
 
