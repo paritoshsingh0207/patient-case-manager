@@ -382,6 +382,7 @@ describe('Spark prescription validation without Cloud Functions', () => {
 describe('Spark admin doctor management, role immutability and revocation',()=>{
   const makeProfile=(uid:string,adminUid='admin')=>({
     active:true,role:'doctor',displayName:'Dr Example',email:'doctor@example.com',
+    emailVerificationRequired:true,
     createdBy:adminUid,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
     statusUpdatedBy:adminUid,
   });
