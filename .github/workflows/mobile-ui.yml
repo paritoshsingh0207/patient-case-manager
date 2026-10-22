@@ -22,7 +22,6 @@ jobs:
           npm ci --no-audit --no-fund
           npm --prefix functions install --no-audit --no-fund
           npm install --no-save --no-package-lock playwright@1.56.1
-          npx playwright install --with-deps chromium
       - name: Exercise mobile account and patient screens
         run: npx firebase-tools emulators:exec --project demo-patient-case-manager --only auth,firestore "node tests/mobile-smoke.cjs"
       - name: Upload mobile screenshots

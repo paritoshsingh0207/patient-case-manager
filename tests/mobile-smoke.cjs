@@ -85,7 +85,7 @@ async function signOut(page){
     stdio:'inherit'
   });
   await waitForServer();
-  browser=await chromium.launch({headless:true});
+  browser=await chromium.launch({channel:'chrome',headless:true});
   const page=await browser.newPage({viewport:{width:360,height:800}});
   await page.goto(base);
   await page.getByRole('heading',{name:'Doctor login'}).waitFor();
