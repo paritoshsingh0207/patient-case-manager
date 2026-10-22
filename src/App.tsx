@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ClinicIcon, type ClinicIconName } from './components/ClinicIcon';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import type {
   CaseInput,
@@ -24,7 +25,7 @@ import {
   subscribePatients,
 } from './services/patientService';
 
-type WorkspaceView = 'patients' | 'medicines' | 'admin';
+type WorkspaceView = 'overview' | 'patients' | 'medicines' | 'admin';
 
 function initials(firstName: string, lastName: string) {
   return `${firstName[0] ?? ''}${lastName[0] ?? ''}`.toUpperCase();
@@ -43,9 +44,10 @@ function ageFromDate(dateOfBirth?: string) {
 }
 
 function viewTitle(view: WorkspaceView) {
-  if (view === 'medicines') return 'Medicine code registry';
-  if (view === 'admin') return 'Administration';
-  return 'Clinical dashboard';
+  if (view === 'medicines') return 'Medicine registry';
+  if (view === 'admin') return 'Clinic administration';
+  if (view === 'patients') return 'Patients';
+  return 'Clinic overview';
 }
 
 export default function App() {
@@ -54,7 +56,7 @@ export default function App() {
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessProfile, setAccessProfile] = useState<PractitionerAccess | null>(null);
   const [accessChecked, setAccessChecked] = useState(false);
-  const [activeView, setActiveView] = useState<WorkspaceView>('patients');
+  const [activeView, setActiveView] = useState<WorkspaceView>('overview');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [cases, setCases] = useState<CaseRecord[]>([]);
@@ -72,7 +74,7 @@ export default function App() {
       setUser(nextUser);
       setAccessProfile(null);
       setAccessChecked(false);
-      setActiveView('patients');
+      setActiveView('overview');
       setAuthLoading(false);
     });
   }, []);
@@ -204,85 +206,72 @@ export default function App() {
     await saveSuggestion(activeDb, selectedPatient.id, activeUser.uid, input, result);
   }
 
-  const navigation = (
-    <>
-      <button
-        className={activeView === 'patients' ? 'active' : ''}
-        aria-current={activeView === 'patients' ? 'page' : undefined}
-        onClick={() => setActiveView('patients')}
-      >
-        <span>▦</span> Patients
-      </button>
-      <button
-        className={activeView === 'medicines' ? 'active' : ''}
-        aria-current={activeView === 'medicines' ? 'page' : undefined}
-        onClick={() => setActiveView('medicines')}
-      >
-        <span>⌕</span> Medicine codes
-      </button>
-      {isAdmin ? (
-        <button
-          className={activeView === 'admin' ? 'active' : ''}
-          aria-current={activeView === 'admin' ? 'page' : undefined}
-          onClick={() => setActiveView('admin')}
-        >
-          <span>⚙</span> Admin
-        </button>
-      ) : null}
-    </>
-  );
+  const navItems: {view: WorkspaceView;label:string;icon:ClinicIconName}[] = [
+    {view:'overview',label:'Overview',icon:'overview'},
+    {view:'patients',label:'Patients',icon:'patients'},
+    {view:'medicines',label:'Medicine registry',icon:'book'},
+    ...(isAdmin?[{view:'admin' as const,label:'Administration',icon:'shield' as const}]:[]),
+  ];
+  const navigation = navItems.map(item=>(
+    <button key={item.view} type="button" title={item.label} aria-label={item.label}
+      aria-current={activeView===item.view?'page':undefined}
+      className={activeView===item.view?'active':''}
+      onClick={()=>setActiveView(item.view)}>
+      <ClinicIcon name={item.icon}/>
+      <span className="nav-label">{item.label}</span>
+    </button>
+  ));
 
   return (
     <div className="app-shell">
-      <div className="app-orb app-orb-one" aria-hidden="true" />
-      <div className="app-orb app-orb-two" aria-hidden="true" />
-
-      <aside className="sidebar glass-panel">
+      <aside className="sidebar" aria-label="Workspace sidebar">
         <div className="brand-block">
-          <div className="brand-mark small">PCM</div>
-          <div>
-            <strong>Case Manager</strong>
-            <span>Clinical workspace</span>
-          </div>
+          <div className="brand-mark small" aria-hidden="true">C</div>
         </div>
-
-        <nav className="side-nav" aria-label="Primary navigation">
-          {navigation}
-        </nav>
-
+        <nav className="side-nav" aria-label="Primary navigation">{navigation}</nav>
         <div className="sidebar-footer">
-          <div className="user-chip">
-            <span>{practitionerName[0]?.toUpperCase() ?? 'P'}</span>
-            <div>
-              <strong>{practitionerName}</strong>
-              <small>{isAdmin ? 'Administrator' : 'Doctor'}</small>
-            </div>
-          </div>
-          <button className="button text inverse" onClick={() => signOut(activeAuth)}>Sign out</button>
+          <button type="button" className="side-logout" title="Sign out" aria-label="Sign out"
+            onClick={()=>signOut(activeAuth)}><ClinicIcon name="logout"/></button>
         </div>
       </aside>
-
-      <main className="main-area">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">{isAdmin ? 'Clinic administration & records' : 'Assigned patient workspace'}</p>
-            <h1>{viewTitle(activeView)}</h1>
-            <p className="topbar-subtitle">
-              {isAdmin
-                ? 'Control doctor access while retaining visibility across the clinic.'
-                : 'Only patients assigned to you are visible in this workspace.'}
-            </p>
+      <div className="workspace-content">
+        <div className="workspace-utility">
+          <div className="clinic-heading">
+            <span className="clinic-identity">{import.meta.env.VITE_CLINIC_NAME?.trim() || 'Clinical Workspace'}</span>
+            <span className="clinic-context">Private clinical records · {new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',year:'numeric'}).format(new Date())}</span>
           </div>
-          {activeView === 'patients' ? (
-            <button className="button primary" onClick={() => setShowPatientForm(true)}>+ New patient</button>
-          ) : null}
-        </header>
-
-        <nav className="mobile-nav glass-panel" aria-label="Mobile navigation">
-          {navigation}
-        </nav>
+          <div className="workspace-account">
+            <span className="role-pill">{isAdmin?'Administrator':'Doctor'}</span>
+            <span className="account-avatar">{practitionerName[0]?.toUpperCase()??'P'}</span>
+            <span className="account-name">{practitionerName}</span>
+            <button type="button" title="Sign out" aria-label="Sign out" className="header-logout"
+              onClick={()=>signOut(activeAuth)}><ClinicIcon name="logout"/></button>
+          </div>
+        </div>
+        <main className="main-area">
+          <header className="topbar">
+            <div>
+              <p className="eyebrow">{isAdmin ? 'CLINIC ADMINISTRATION' : 'PRACTITIONER WORKSPACE'}</p>
+              <h1>{viewTitle(activeView)}</h1>
+              <p className="topbar-subtitle">
+                {activeView==='overview' ? 'A clear view of your clinic records and everyday work.'
+                  : activeView==='patients' ? (isAdmin ? 'Review clinic patients and care teams.' : 'Only patients assigned to you appear here.')
+                  : activeView==='medicines' ? 'Find approved codes and verify historical medicine identities.'
+                  : 'Manage authorized practitioners and patient access.'}
+              </p>
+            </div>
+            {activeView==='patients' ? <button className="button primary" onClick={()=>setShowPatientForm(true)}>
+              <ClinicIcon name="plus"/> Add patient</button>:null}
+          </header>
+          <nav className="mobile-nav" aria-label="Mobile navigation">{navigation}</nav>
 
         {dataError ? <div className="page-error" role="alert">{dataError}</div> : null}
+
+        {activeView === 'overview' ? (
+          <ClinicOverview patients={patients} cases={cases} selectedPatient={selectedPatient} isAdmin={isAdmin}
+            onOpenPatient={(id)=>{setSelectedPatientId(id);setActiveView('patients');}}
+            onShowPatients={()=>setActiveView('patients')} onAddPatient={()=>setShowPatientForm(true)}/>
+        ) : null}
 
         {activeView === 'patients' ? (
           <PatientWorkspace
@@ -317,13 +306,61 @@ export default function App() {
             patients={patients}
           />
         ) : null}
-      </main>
+        </main>
+      </div>
 
       {showPatientForm ? (
         <PatientForm onSubmit={addPatient} onCancel={() => setShowPatientForm(false)} />
       ) : null}
     </div>
   );
+}
+
+
+function ClinicOverview({patients,cases,selectedPatient,isAdmin,onOpenPatient,onShowPatients,onAddPatient}:{
+  patients:Patient[];cases:CaseRecord[];selectedPatient:Patient|null;isAdmin:boolean;
+  onOpenPatient:(id:string)=>void;onShowPatients:()=>void;onAddPatient:()=>void;
+}) {
+  const recent=[...patients].sort((a,b)=>(b.createdAt?.getTime()??0)-(a.createdAt?.getTime()??0)).slice(0,6);
+  const assignments=patients.reduce((n,p)=>n+p.doctorIds.length,0);
+  return <div className="clinic-overview">
+    <div className="overview-intro"><div><p className="eyebrow">PATIENT CARE</p><h2>Welcome to your workspace</h2>
+      <p>Your clinical records and patient directory are available in one place.</p></div>
+      <button type="button" className="button primary" onClick={onAddPatient}><ClinicIcon name="plus"/> New patient</button>
+    </div>
+    <div className="overview-stats">
+      <section className="overview-stat"><span className="stat-label"><ClinicIcon name="patients"/> Accessible patients</span>
+        <strong>{patients.length}</strong><small>{isAdmin?'Across the clinic':'Assigned to your account'}</small></section>
+      <section className="overview-stat"><span className="stat-label"><ClinicIcon name="clipboard"/> Selected patient cases</span>
+        <strong>{selectedPatient?cases.length:'—'}</strong>
+        <small>{selectedPatient?selectedPatient.firstName+' '+selectedPatient.lastName:'Select a patient to review cases'}</small></section>
+      <section className="overview-stat"><span className="stat-label"><ClinicIcon name="shield"/> Care-team assignments</span>
+        <strong>{assignments}</strong><small>Across accessible records</small></section>
+    </div>
+    <div className="overview-sections">
+      <section className="workspace-card glass-panel overview-recent">
+        <div className="section-heading compact"><div><p className="eyebrow">DIRECTORY</p><h3>Recent patients</h3></div>
+          <button className="button secondary" type="button" onClick={onShowPatients}>View all <ClinicIcon name="chevron"/></button></div>
+        <div className="overview-patient-list">
+          {recent.map(p=><button type="button" key={p.id} className="overview-patient-row" onClick={()=>onOpenPatient(p.id)}>
+            <span className="avatar">{initials(p.firstName,p.lastName)}</span>
+            <span className="patient-row-copy"><strong>{p.firstName} {p.lastName}</strong><small>{p.phone||p.email||'No contact details'}</small></span>
+            <span className="overview-patient-meta">{p.createdAt?new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',year:'numeric'}).format(p.createdAt):'Patient record'}</span>
+            <ClinicIcon name="chevron"/></button>)}
+          {!recent.length?<div className="empty-list">No accessible patient records yet.</div>:null}
+        </div>
+      </section>
+      <aside className="workspace-card glass-panel overview-quick">
+        <p className="eyebrow">QUICK ACTIONS</p><h3>Work efficiently</h3>
+        <button type="button" onClick={onShowPatients}><span><ClinicIcon name="search"/></span>
+          <div><strong>Find a patient</strong><small>Browse case histories and records</small></div><ClinicIcon name="chevron"/></button>
+        <button type="button" onClick={onAddPatient}><span><ClinicIcon name="plus"/></span>
+          <div><strong>Add patient</strong><small>Start a secure patient record</small></div><ClinicIcon name="chevron"/></button>
+        <div className="overview-privacy"><ClinicIcon name="shield"/>
+          <p>Access is enforced by Firebase Authentication and Firestore Security Rules, not by the interface alone.</p></div>
+      </aside>
+    </div>
+  </div>;
 }
 
 interface PatientWorkspaceProps {
@@ -361,6 +398,8 @@ function PatientWorkspace({
   addCase,
   persistSuggestion,
 }: PatientWorkspaceProps) {
+  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'>('history');
+  useEffect(()=>setPatientTab('history'),[selectedPatientId]);
   return (
     <div className="workspace-layout">
       <section className="patient-column glass-panel">
@@ -400,23 +439,36 @@ function PatientWorkspace({
         {selectedPatient ? (
           <>
             <PatientHeader patient={selectedPatient} caseCount={cases.length} />
-            <div className={`detail-grid ${isDoctor ? '' : 'admin-history-grid'}`}>
-              {isDoctor ? (
-                <CaseEditor
-                  patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
-                  onSaveCase={addCase}
-                  onSaveSuggestion={persistSuggestion}
-                />
-              ) : null}
-              <CaseTimeline cases={cases} />
-            </div>
-            <PrescriptionPanel
-              db={db}
-              patient={selectedPatient}
-              userId={userId}
-              practitionerName={practitionerName}
+            <section className="patient-safety" aria-label="Patient safety information">
+              <div className={selectedPatient.allergies?.trim()?'safety-item has-alert':'safety-item'}>
+                <div className="safety-heading"><ClinicIcon name="alert"/><span>Known allergies</span></div>
+                <p>{selectedPatient.allergies?.trim() || 'Not documented — verify with patient'}</p>
+              </div>
+              <div className="safety-item">
+                <div className="safety-heading"><ClinicIcon name="clipboard"/><span>Current medicines</span></div>
+                <p>{selectedPatient.currentMedications?.trim() || 'Not documented — verify with patient'}</p>
+              </div>
+            </section>
+            <nav className="patient-tabs" aria-label="Patient sections">
+              <button type="button" className={patientTab==='history'?'selected':''} aria-current={patientTab==='history'?'page':undefined}
+                onClick={()=>setPatientTab('history')}><ClinicIcon name="history"/> Clinical history</button>
+              {isDoctor?<button type="button" className={patientTab==='consultation'?'selected':''}
+                aria-current={patientTab==='consultation'?'page':undefined}
+                onClick={()=>setPatientTab('consultation')}><ClinicIcon name="clipboard"/> New consultation</button>:null}
+              <button type="button" className={patientTab==='prescriptions'?'selected':''}
+                aria-current={patientTab==='prescriptions'?'page':undefined}
+                onClick={()=>setPatientTab('prescriptions')}><ClinicIcon name="file"/> Prescriptions</button>
+            </nav>
+            {patientTab==='history'?<CaseTimeline cases={cases}/>:null}
+            {patientTab==='consultation'&&isDoctor?<CaseEditor
+              patientName={selectedPatient.firstName+' '+selectedPatient.lastName}
+              onSaveCase={addCase}
+              onSaveSuggestion={persistSuggestion}
+            />:null}
+            {patientTab==='prescriptions'?<PrescriptionPanel
+              db={db} patient={selectedPatient} userId={userId} practitionerName={practitionerName}
               canPrescribe={isDoctor}
-            />
+            />:null}
           </>
         ) : (
           <div className="empty-state glass-panel">
@@ -439,7 +491,7 @@ function PatientHeader({ patient, caseCount }: { patient: Patient; caseCount: nu
     <section className="patient-header workspace-card glass-panel">
       <div className="avatar large">{initials(patient.firstName, patient.lastName)}</div>
       <div className="patient-identity">
-        <p className="eyebrow">Patient record</p>
+        <p className="eyebrow">PATIENT PROFILE</p>
         <h2>{patient.firstName} {patient.lastName}</h2>
         <span>{patient.email || patient.phone || 'No contact details'}</span>
       </div>
