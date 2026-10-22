@@ -26,6 +26,7 @@ export function subscribePractitionerAccess(
       onChange({
         uid: snapshot.id,
         active: data.active === true,
+        emailVerificationRequired: data.emailVerificationRequired === true,
         role,
         displayName: typeof data.displayName === 'string' ? data.displayName : undefined,
         email: typeof data.email === 'string' ? data.email : undefined,
@@ -41,6 +42,8 @@ export function matchesLoginRole(profile: PractitionerAccess | null, selected: L
   return selected === null || profile?.role === selected;
 }
 
-export function hasWorkspaceAccess(profile: PractitionerAccess | null) {
-  return Boolean(profile?.active && (profile.role === 'doctor' || profile.role === 'admin'));
+export function hasWorkspaceAccess(profile: PractitionerAccess | null, emailVerified = true) {
+  return Boolean(profile?.active
+    && (profile.role === 'doctor' || profile.role === 'admin')
+    && (!profile.emailVerificationRequired || emailVerified));
 }

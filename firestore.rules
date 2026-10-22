@@ -10,7 +10,9 @@ service cloud.firestore {
     }
     function isActiveMember() {
       return hasProfile() && profile().active == true
-        && profile().role in ['admin', 'doctor', 'practitioner'];
+        && profile().role in ['admin', 'doctor', 'practitioner']
+        && (profile().get('emailVerificationRequired', false) != true
+          || request.auth.token.get('email_verified', false) == true);
     }
     function isAdmin() { return isActiveMember() && profile().role == 'admin'; }
     function isDoctor() {
@@ -80,30 +82,164 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
-      // Only an active administrator can link an existing Auth UID as a doctor.
-      allow create: if isAdmin()
-        && userId != request.auth.uid
-        && userId.matches('^[A-Za-z0-9_-]{6,128}$')
+      // Pending registration: only the authenticated owner may submit their
+      // own unprivileged, inactive doctor application.
+      allow create: if (
+        signedIn()
+        && userId == request.auth.uid
+        && request.auth.token.email is string
         && request.resource.data.keys().hasOnly([
           'role','active','displayName','email','createdBy',
-          'createdAt','updatedAt','statusUpdatedBy'])
+          'createdAt','updatedAt','statusUpdatedBy','emailVerificationRequired'])
         && request.resource.data.keys().hasAll([
           'role','active','displayName','email','createdBy',
-          'createdAt','updatedAt','statusUpdatedBy'])
+          'createdAt','updatedAt','statusUpdatedBy','emailVerificationRequired'])
         && request.resource.data.role == 'doctor'
+        && request.resource.data.active == false
+        && request.resource.data.emailVerificationRequired == true
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 120
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.statusUpdatedBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+      ) || (
+        // Admin creates another administrator for a separately registered
+        // Authentication UID, never for their own account.
+        isAdmin()
+        && userId != request.auth.uid
+        && userId.matches('^[A-Za-z0-9_-]{6,128}{patientId} {
+      allow create: if isAdmin()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.doctorIds is list
+        && request.resource.data.doctorIds.size() <= 20;
+      allow create: if isDoctor()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.doctorIds == [request.auth.uid];
+      allow read: if isAdmin() || (isDoctor()
+        && resource.data.doctorIds is list
+        && request.auth.uid in resource.data.doctorIds);
+      // Admin can manage care teams without Cloud Functions. Active status is
+      // independently checked on every doctor read; only admins can share.
+      allow update: if isAdmin()
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.doctorIds is list
+        && request.resource.data.doctorIds.size() <= 20;
+      allow update: if isDoctor()
+        && request.auth.uid in resource.data.doctorIds
+        && request.resource.data.doctorIds == resource.data.doctorIds
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
+      match /cases/{caseId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId);
+        allow update, delete: if false;
+      }
+      match /suggestions/{suggestionId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId);
+        allow update, delete: if false;
+      }
+      match /followUps/{followUpId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId);
+        allow update, delete: if false;
+      }
+      match /prescriptions/{prescriptionId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if validPrescription(patientId);
+        allow update: if canVoidPrescription(patientId);
+        allow delete: if false;
+      }
+    }
+    match /medicineCodes/{codeId} {
+      allow read: if isActiveMember();
+      // Import and archive via offline Admin SDK; never overwrite browser-side.
+      allow create, update, delete: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+})
+        && request.resource.data.keys().hasOnly([
+          'role','active','displayName','email','createdBy',
+          'createdAt','updatedAt','statusUpdatedBy','emailVerificationRequired'])
+        && request.resource.data.keys().hasAll([
+          'role','active','displayName','email','createdBy',
+          'createdAt','updatedAt','statusUpdatedBy','emailVerificationRequired'])
+        && request.resource.data.role in ['doctor','admin']
         && request.resource.data.active == true
+        && request.resource.data.emailVerificationRequired == true
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() >= 2
         && request.resource.data.displayName.size() <= 120
         && request.resource.data.email is string
         && request.resource.data.email.size() >= 5
         && request.resource.data.email.size() <= 254
-        && request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$')
+        && request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+{patientId} {
+      allow create: if isAdmin()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.doctorIds is list
+        && request.resource.data.doctorIds.size() <= 20;
+      allow create: if isDoctor()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.doctorIds == [request.auth.uid];
+      allow read: if isAdmin() || (isDoctor()
+        && resource.data.doctorIds is list
+        && request.auth.uid in resource.data.doctorIds);
+      // Admin can manage care teams without Cloud Functions. Active status is
+      // independently checked on every doctor read; only admins can share.
+      allow update: if isAdmin()
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.doctorIds is list
+        && request.resource.data.doctorIds.size() <= 20;
+      allow update: if isDoctor()
+        && request.auth.uid in resource.data.doctorIds
+        && request.resource.data.doctorIds == resource.data.doctorIds
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
+      match /cases/{caseId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId);
+        allow update, delete: if false;
+      }
+      match /suggestions/{suggestionId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId);
+        allow update, delete: if false;
+      }
+      match /followUps/{followUpId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId);
+        allow update, delete: if false;
+      }
+      match /prescriptions/{prescriptionId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if validPrescription(patientId);
+        allow update: if canVoidPrescription(patientId);
+        allow delete: if false;
+      }
+    }
+    match /medicineCodes/{codeId} {
+      allow read: if isActiveMember();
+      // Import and archive via offline Admin SDK; never overwrite browser-side.
+      allow create, update, delete: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+})
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.statusUpdatedBy == request.auth.uid
         && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time;
-      // An admin may only activate/deactivate doctors, never edit roles or identities.
+        && request.resource.data.updatedAt == request.time
+      );
+      // Only an admin can change a doctor's active flag; no one may change
+      // role, email or clinical identity through account status actions.
       allow update: if isAdmin()
         && resource.data.role in ['doctor','practitioner']
         && resource.data.get('deleted',false) != true

@@ -4,6 +4,7 @@ export type AppRole = 'doctor' | 'admin' | 'unknown';
 export interface PractitionerAccess {
   uid: string;
   active: boolean;
+  emailVerificationRequired?: boolean;
   role: AppRole;
   displayName?: string;
   email?: string;
