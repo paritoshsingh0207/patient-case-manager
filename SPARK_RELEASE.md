@@ -18,9 +18,13 @@
        node functions/scripts/audit-legacy-patients.cjs --project=PROJECT_ID --apply --confirm-project=PROJECT_ID --backup-confirmed
 
    Re-run the dry run and verify that clinical access was retained.
-5. Provision the first admin and each doctor in Firebase Authentication Console,
-   then use functions/scripts/manage-doctor.cjs for their active Firestore
-   profiles. Keep role writes denied from browsers; no public signup.
+5. First admin bootstrap remains a trusted operation; never expose self-admin signup.
+   New doctors can now register with Email/Password in the application, then
+   wait for admin activation under Administration → Doctors. A verified email
+   is required before newly provisioned accounts can access clinical records.
+   Active admins can add a separate admin login from Administration → Administrators.
+   Browser rules allow only self-created *inactive* doctor applications and
+   admin-authorized new administrator profiles. Existing admin credentials are unchanged.
 6. Dry-run the approved 881-entry JSON import with
    functions/scripts/import-verified-medicines.cjs. It requires exactly
    881 unique alphabetical codes, 688 historical aliases and fingerprint
@@ -59,7 +63,7 @@ readable for authorized patient caregivers.
 
 ## Known product limitations
 
-- Doctor account creation/deactivation requires a trusted offline operation.
+- Doctors self-register and await admin approval; new admins are created by an existing admin.
 - No Firebase Storage / clinical file attachments on Spark.
 - No Cloud Functions; local Firebase Admin SDK scripts do not deploy.
 - Prescriptions are not a validated medical or pharmacy dispensing system.

@@ -418,3 +418,85 @@ describe('Spark admin doctor management, role immutability and revocation',()=>{
     await assertFails(deleteDoc(ref));
   });
 });
+
+
+describe('doctor self-registration and admin-managed onboarding',()=>{
+  function pendingProfile(uid:string,email:string) {
+    return {
+      role:'doctor',active:false,displayName:'Dr New Doctor',email,
+      emailVerificationRequired:true,
+      createdBy:uid,statusUpdatedBy:uid,
+      createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
+    };
+  }
+  it('lets a new doctor submit only a pending account for their own UID and email',async()=>{
+    const client=testEnv.authenticatedContext('newdoctor',{email:'new@clinic.test',email_verified:false}).firestore();
+    await assertSucceeds(setDoc(doc(client,'users/newdoctor'),pendingProfile('newdoctor','new@clinic.test')));
+    await assertFails(getDocs(collection(client,'patients')));
+    await assertFails(getDocs(collection(client,'medicineCodes')));
+    await assertFails(setDoc(doc(client,'users/otherdoctor'),pendingProfile('otherdoctor','new@clinic.test')));
+  });
+  it('rejects self-approved signup, spoofed email and self-granted admin',async()=>{
+    const client=testEnv.authenticatedContext('newdoctor',{email:'new@clinic.test'}).firestore();
+    await assertFails(setDoc(doc(client,'users/newdoctor'),{
+      ...pendingProfile('newdoctor','new@clinic.test'),active:true,
+    }));
+    await assertFails(setDoc(doc(client,'users/newdoctor'),{
+      ...pendingProfile('newdoctor','new@clinic.test'),role:'admin',
+    }));
+    await assertFails(setDoc(doc(client,'users/newdoctor'),pendingProfile('newdoctor','another@clinic.test')));
+    await assertFails(setDoc(doc(client,'users/newdoctor'),{
+      ...pendingProfile('newdoctor','new@clinic.test'),isAdmin:true,
+    }));
+  });
+  it('requires both admin approval and verified email before exposing patient records',async()=>{
+    await seedUser('admin','admin');
+    await seedPatient('patient-a',['newdoctor']);
+    const unverified=testEnv.authenticatedContext('newdoctor',{email:'new@clinic.test',email_verified:false}).firestore();
+    await assertSucceeds(setDoc(doc(unverified,'users/newdoctor'),pendingProfile('newdoctor','new@clinic.test')));
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    await assertSucceeds(updateDoc(doc(admin,'users/newdoctor'),{
+      active:true,updatedAt:serverTimestamp(),statusUpdatedBy:'admin',
+    }));
+    await assertFails(getDoc(doc(unverified,'patients/patient-a')));
+    const verified=testEnv.authenticatedContext('newdoctor',{email:'new@clinic.test',email_verified:true}).firestore();
+    await assertSucceeds(getDoc(doc(verified,'patients/patient-a')));
+    await assertFails(updateDoc(doc(unverified,'users/newdoctor'),{active:true}));
+    await assertSucceeds(updateDoc(doc(admin,'users/newdoctor'),{
+      active:false,updatedAt:serverTimestamp(),statusUpdatedBy:'admin',
+    }));
+    await assertFails(getDoc(doc(verified,'patients/patient-a')));
+  });
+  it('only an administrator may create another verified-email-required admin profile',async()=>{
+    await seedUser('admin','admin');
+    await seedUser('doctor','doctor');
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    const doctor=testEnv.authenticatedContext('doctor').firestore();
+    const adminProfile={
+      role:'admin',active:true,displayName:'Clinic Admin',email:'newadmin@clinic.test',
+      emailVerificationRequired:true,createdBy:'admin',statusUpdatedBy:'admin',
+      createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
+    };
+    await assertSucceeds(setDoc(doc(admin,'users/admin-new-uid'),adminProfile));
+    await assertFails(setDoc(doc(doctor,'users/not-admin'),{
+      ...adminProfile,createdBy:'doctor',statusUpdatedBy:'doctor',
+    }));
+    await assertFails(updateDoc(doc(admin,'users/doctor'),{role:'admin'}));
+    await assertFails(setDoc(doc(admin,'users/admin-self'),{...adminProfile,createdBy:'admin',role:'owner'}));
+  });
+  it('new admin must verify email, legacy admin remains accessible',async()=>{
+    await seedUser('admin','admin');
+    await seedPatient('patient-a',[]);
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    await assertSucceeds(setDoc(doc(admin,'users/another-admin'),{
+      role:'admin',active:true,displayName:'New Admin',email:'admin2@clinic.test',
+      emailVerificationRequired:true,createdBy:'admin',statusUpdatedBy:'admin',
+      createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
+    }));
+    const unverified=testEnv.authenticatedContext('another-admin',{email:'admin2@clinic.test',email_verified:false}).firestore();
+    const verified=testEnv.authenticatedContext('another-admin',{email:'admin2@clinic.test',email_verified:true}).firestore();
+    await assertFails(getDocs(collection(unverified,'patients')));
+    await assertSucceeds(getDocs(collection(verified,'patients')));
+    await assertSucceeds(getDocs(collection(admin,'patients')));
+  });
+});
