@@ -106,14 +106,12 @@ service cloud.firestore {
       // An admin may only activate/deactivate doctors, never edit roles or identities.
       allow update: if isAdmin()
         && resource.data.role in ['doctor','practitioner']
-        && !('deleted' in resource.data && resource.data.deleted == true)
+        && resource.data.get('deleted',false) != true
         && request.resource.data.role == resource.data.role
         && request.resource.data.active is bool
         && request.resource.data.active != resource.data.active
         && request.resource.data.diff(resource.data).affectedKeys()
            .hasOnly(['active','updatedAt','statusUpdatedBy'])
-        && request.resource.data.diff(resource.data).affectedKeys()
-           .hasAll(['active','updatedAt','statusUpdatedBy'])
         && request.resource.data.updatedAt == request.time
         && request.resource.data.statusUpdatedBy == request.auth.uid;
       allow delete: if false;
