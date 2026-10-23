@@ -1,11 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import type { Patient, PatientInput, Sex } from '../types';
 import { patientInputFromRecord } from '../lib/patientEdits';
+import { findPotentialDuplicates } from '../lib/patientDuplicates';
 
 interface PatientFormProps {
-  onSubmit: (input: PatientInput) => Promise<void>;
+  onSubmit: (input: PatientInput, confirmedPotentialDuplicate?: boolean) => Promise<void>;
   onCancel: () => void;
   initialPatient?: Patient;
+  possiblePatients?: Patient[];
+  onOpenExisting?: (patientId: string) => void;
+  patientDirectoryReady?: boolean;
 }
 
 const emptyPatient: PatientInput = {
@@ -23,23 +27,35 @@ const emptyPatient: PatientInput = {
   currentMedications: '',
 };
 
-export function PatientForm({ onSubmit, onCancel, initialPatient }: PatientFormProps) {
+export function PatientForm({ onSubmit, onCancel, initialPatient, possiblePatients = [],
+  onOpenExisting, patientDirectoryReady = true }: PatientFormProps) {
   const isEditing = Boolean(initialPatient);
   const [form, setForm] = useState<PatientInput>(() => initialPatient
     ? patientInputFromRecord(initialPatient) : { ...emptyPatient });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [confirmedPotentialDuplicate, setConfirmedPotentialDuplicate] = useState(false);
+  const matches = isEditing ? [] : findPotentialDuplicates(form, possiblePatients);
 
   function update<K extends keyof PatientInput>(key: K, value: PatientInput[K]) {
+    setConfirmedPotentialDuplicate(false);
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!isEditing && !patientDirectoryReady) {
+      setError('The patient directory is unavailable. Wait for it to load and try again.');
+      return;
+    }
+    if (!isEditing && matches.length && !confirmedPotentialDuplicate) {
+      setError('Review the possible matching charts and confirm before creating another patient.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
-      await onSubmit(form);
+      await onSubmit(form, !isEditing && confirmedPotentialDuplicate);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save patient.');
     } finally {
@@ -79,10 +95,38 @@ export function PatientForm({ onSubmit, onCancel, initialPatient }: PatientFormP
             <label>Known allergies<textarea value={form.allergies} onChange={(e) => update('allergies', e.target.value)} /></label>
             <label>Current medications<textarea value={form.currentMedications} onChange={(e) => update('currentMedications', e.target.value)} /></label>
           </div>
-          {error ? <div className="inline-error">{error}</div> : null}
+          {!isEditing && matches.length ? (
+            <section className="duplicate-warning" aria-label="Possible existing patients">
+              <strong>Possible patient already exists</strong>
+              <p>These are potential matches among records you can access. Confirm identity against
+                the existing chart before opening a second record. Matching fields are clues,
+                not proof of identity.</p>
+              <div className="duplicate-warning-list">
+                {matches.slice(0, 8).map(match => (
+                  <div key={match.patient.id} className="duplicate-warning-row">
+                    <div>
+                      <strong>{match.patient.firstName} {match.patient.lastName}</strong>
+                      <small>{match.patient.dateOfBirth || 'Birth date not recorded'} · {match.reasons.join(' · ')}</small>
+                    </div>
+                    {onOpenExisting ? <button type="button" className="button secondary"
+                      onClick={() => onOpenExisting(match.patient.id)}>Open chart</button> : null}
+                  </div>
+                ))}
+              </div>
+              {matches.length > 8 ? <p>Showing 8 of {matches.length} matches.</p> : null}
+              <label className="duplicate-confirmation">
+                <input type="checkbox" checked={confirmedPotentialDuplicate}
+                  onChange={event => setConfirmedPotentialDuplicate(event.target.checked)} />
+                I checked the possible matches and still need to create a separate patient record.
+              </label>
+            </section>
+          ) : null}
+          {!isEditing && !patientDirectoryReady ?
+            <p className="inline-error" role="alert">Patient directory has not loaded. Creating a record is temporarily disabled.</p> : null}
+          {error ? <div className="inline-error" role="alert">{error}</div> : null}
           <div className="modal-actions">
             <button type="button" className="button secondary" disabled={saving} onClick={onCancel}>Cancel</button>
-            <button type="submit" className="button primary" disabled={saving}>{saving ? 'Saving…' : isEditing ? 'Save changes' : 'Create patient'}</button>
+            <button type="submit" className="button primary" disabled={saving || (!isEditing && !patientDirectoryReady) || (!isEditing && matches.length > 0 && !confirmedPotentialDuplicate)}>{saving ? 'Saving…' : isEditing ? 'Save changes' : 'Create patient'}</button>
           </div>
         </form>
       </section>
