@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ClinicIcon, type ClinicIconName } from './components/ClinicIcon';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, reload, sendEmailVerification, signOut, type User } from 'firebase/auth';
 import type {
   CaseInput,
   CaseRecord,
@@ -53,6 +53,7 @@ function viewTitle(view: WorkspaceView) {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loginRole, setLoginRole] = useState<LoginRole | null>(null);
+  const [verificationRefresh,setVerificationRefresh]=useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessProfile, setAccessProfile] = useState<PractitionerAccess | null>(null);
@@ -107,7 +108,8 @@ export default function App() {
     );
   }, [user]);
 
-  const authorized = hasWorkspaceAccess(accessProfile);
+  const verificationNeeded = accessProfile?.registrationMethod === 'self' && user?.emailVerified !== true;
+  const authorized = hasWorkspaceAccess(accessProfile) && !verificationNeeded;
 
   useEffect(() => {
     if (!user || !db || !authorized || !accessProfile) {
@@ -178,7 +180,9 @@ export default function App() {
   }
 
   if (!authorized || !accessProfile) {
-    return <AccessDenied email={user.email} onSignOut={() => signOut(activeAuth)} />;
+    return <AccessDenied email={user.email} requiresVerification={verificationNeeded}
+      onRefresh={async()=>{await reload(user);await user.getIdToken(true);setVerificationRefresh(x=>x+1);}}
+      onResend={()=>sendEmailVerification(user)} onSignOut={() => signOut(activeAuth)} />;
   }
   if (!matchesLoginRole(accessProfile, loginRole)) {
     return <RoleMismatch selected={loginRole!} onSignOut={async () => {
@@ -244,7 +248,7 @@ export default function App() {
         <div className="workspace-utility">
           <div className="clinic-heading">
             <span className="clinic-identity">{import.meta.env.VITE_CLINIC_NAME?.trim() || 'Clinical Workspace'}</span>
-            <span className="clinic-context">Private clinical records · {new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',year:'numeric'}).format(new Date())}</span>
+            <span className="clinic-context">{new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',year:'numeric'}).format(new Date())}</span>
           </div>
           <div className="workspace-account">
             <span className="role-pill">{isAdmin?'Administrator':'Doctor'}</span>
@@ -331,7 +335,7 @@ function ClinicOverview({patients,cases,selectedPatient,isAdmin,onOpenPatient,on
   const recent=[...patients].sort((a,b)=>(b.createdAt?.getTime()??0)-(a.createdAt?.getTime()??0)).slice(0,6);
   const assignments=patients.reduce((n,p)=>n+p.doctorIds.length,0);
   return <div className="clinic-overview">
-    <div className="overview-intro"><div><p className="eyebrow">PATIENT CARE</p><h2>Welcome to your workspace</h2>
+    <div className="overview-intro"><div><p className="eyebrow">PATIENT CARE</p><h2>Clinic overview</h2>
       <p>Your clinical records and patient directory are available in one place.</p></div>
       <button type="button" className="button primary" onClick={onAddPatient}><ClinicIcon name="plus"/> New patient</button>
     </div>
@@ -574,7 +578,8 @@ function RoleMismatch({selected,onSignOut}:{selected:LoginRole;onSignOut:()=>voi
   </section></main>;
 }
 
-function AccessDenied({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
+function AccessDenied({ email, onSignOut, requiresVerification, onRefresh, onResend }: { email: string | null; onSignOut: () => void; requiresVerification:boolean; onRefresh:()=>Promise<void>;onResend:()=>Promise<void> }) {
+  const [notice,setNotice]=useState('');
   return (
     <main className="access-shell">
       <div className="access-orb" aria-hidden="true" />
@@ -583,10 +588,15 @@ function AccessDenied({ email, onSignOut }: { email: string | null; onSignOut: (
         <p className="eyebrow">Authorization required</p>
         <h1>This account is not enabled for the application.</h1>
         <p>
-          Authentication succeeded, but this account is not currently an active doctor or administrator.
-          Contact the administrator if you believe this is an error.
+          Your account is awaiting administrator approval or has been deactivated. Please contact the clinic administrator.
         </p>
         {email ? <div className="identity-chip">{email}</div> : null}
+        {requiresVerification?<div className="account-verification-actions">
+          <p>Verify your email address before you can access your approved account.</p>
+          <button type="button" className="button secondary" onClick={async()=>{try{await onResend();setNotice('Verification email sent.');}catch{setNotice('Could not send verification email.');}}}>Resend verification email</button>
+          <button type="button" className="button secondary" onClick={async()=>{try{await onRefresh();setNotice('Account status refreshed.');}catch{setNotice('Unable to check verification.');}}}>I verified my email</button>
+        </div>:null}
+        {notice?<p role="status">{notice}</p>:null}
         <button className="button primary" onClick={onSignOut}>Return to sign in</button>
       </section>
     </main>

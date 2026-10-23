@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { sendPasswordResetEmail, signInWithEmailAndPassword, type Auth } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, type Auth } from 'firebase/auth';
 import type { LoginRole } from '../services/accessService';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface AuthPanelProps {
   auth: Auth;
@@ -11,6 +13,8 @@ function friendlyAuthMessage() {
 }
 export function AuthPanel({auth,onBeginSignIn}:AuthPanelProps) {
   const [role,setRole]=useState<LoginRole>('doctor');
+  const [register,setRegister]=useState(false);
+  const [fullName,setFullName]=useState('');
   const [email,setEmail]=useState('');
   const [password,setPassword]=useState('');
   const [error,setError]=useState('');
@@ -24,6 +28,21 @@ export function AuthPanel({auth,onBeginSignIn}:AuthPanelProps) {
     catch { setError(friendlyAuthMessage()); }
     finally {setWorking(false);}
   }
+  async function registerDoctor(event:FormEvent) {
+    event.preventDefault();setError('');setNotice('');setWorking(true);
+    try {
+      if(!db)throw Error('Database unavailable.');
+      if(fullName.trim().length<2||fullName.trim().length>120)throw Error('Enter your full name.');
+      const result=await createUserWithEmailAndPassword(auth,email.trim(),password);
+      try {
+        await setDoc(doc(db,'users',result.user.uid),{role:'doctor',active:false,
+          displayName:fullName.trim(),email:result.user.email,registrationMethod:'self',createdAt:serverTimestamp()});
+      }catch{setError('Login created, but approval request could not be saved. Contact the administrator.');return;}
+      try{await sendEmailVerification(result.user);}catch{/* Non-blocking verification email. */}
+      onBeginSignIn('doctor');
+    }catch(e){setError(e instanceof Error&&e.message==='Enter your full name.'?e.message:'Registration failed. Check your details or try signing in.');}
+    finally{setWorking(false);}
+  }
   async function resetPassword() {
     setError('');setNotice('');
     if(!email.trim()) {setError('Enter your authorized email address first.');return;}
@@ -31,26 +50,12 @@ export function AuthPanel({auth,onBeginSignIn}:AuthPanelProps) {
     setNotice('If this address belongs to an authorized account, password reset instructions have been sent.');
   }
   function chooseRole(next:LoginRole) {
-    if(working)return;setRole(next);setError('');setNotice('');setPassword('');
+    if(working)return;setRole(next);setRegister(false);setError('');setNotice('');setPassword('');
   }
   return <main className="auth-shell">
-    <section className="auth-story" aria-labelledby="login-title">
-      <div className="brand-lockup"><div className="brand-mark">PCM</div><div>
-        <strong>Patient Case Manager</strong><span>Private clinical workspace</span>
-      </div></div>
-      <div className="auth-copy"><p className="eyebrow">SECURE CLINIC ACCESS</p>
-        <h1 id="login-title">One clinic. Two dedicated workspaces.</h1>
-        <p className="lede">Administrators coordinate doctor access and patient assignments.
-        Doctors manage consultations and prescriptions for their own patients.</p>
-      </div>
-      <div className="trust-row"><span><i>✓</i> Individual accounts</span>
-        <span><i>✓</i> Verified Firebase roles</span><span><i>✓</i> Assigned patient access</span></div>
-      <p className="auth-footnote">Only authorized accounts can sign in. There is no public registration.</p>
-    </section>
     <section className="auth-card glass-panel" aria-label="Clinic sign in">
       <div className="auth-card-header"><div className="lock-badge" aria-hidden="true">⌁</div>
-        <div><p className="eyebrow">CHOOSE YOUR WORKSPACE</p>
-          <h2>{role==='admin'?'Administrator sign in':'Doctor sign in'}</h2></div>
+        <div><h2>{register?'Doctor registration':role==='admin'?'Administrator sign in':'Doctor sign in'}</h2></div>
       </div>
       <div className="auth-role-switch" role="group" aria-label="Login as">
         <button type="button" className={role==='admin'?'selected':''} aria-pressed={role==='admin'}
@@ -58,10 +63,9 @@ export function AuthPanel({auth,onBeginSignIn}:AuthPanelProps) {
         <button type="button" className={role==='doctor'?'selected':''} aria-pressed={role==='doctor'}
           disabled={working} onClick={()=>chooseRole('doctor')}>Doctor Login</button>
       </div>
-      <p className="auth-helper">{role==='admin'
-        ? 'Manage doctor accounts and patient access.'
-        : 'Access assigned patients, consultations and prescriptions.'}</p>
-      <form onSubmit={submit} className="stack-form">
+      <form onSubmit={register?registerDoctor:submit} className="stack-form">
+        {register?<label>Full name<input required minLength={2} maxLength={120} autoComplete="name"
+          value={fullName} onChange={e=>setFullName(e.target.value)}/></label>:null}
         <label>{role==='admin'?'Admin email address':'Doctor email address'}
           <input type="email" required inputMode="email" autoCapitalize="none" autoComplete="username"
             value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@clinic.com"/>
@@ -79,12 +83,12 @@ export function AuthPanel({auth,onBeginSignIn}:AuthPanelProps) {
         {error?<div className="inline-error" role="alert">{error}</div>:null}
         {notice?<div className="inline-notice" role="status">{notice}</div>:null}
         <button className="button primary auth-submit" disabled={working} type="submit">
-          {working?'Signing in…':role==='admin'?'Sign in as Admin':'Sign in as Doctor'}</button>
+          {working?'Processing…':register?'Register for approval':role==='admin'?'Sign in as Admin':'Sign in as Doctor'}</button>
       </form>
-      <button className="button text auth-reset" type="button" onClick={resetPassword}>Forgot password?</button>
-      <div className="restricted-note"><span aria-hidden="true">◆</span><p>
-        <strong>Verified access.</strong> Choosing a tab does not grant permissions.
-        The clinic checks your actual role after Firebase sign-in.</p></div>
+      {!register?<button className="button text auth-reset" type="button" onClick={resetPassword}>Forgot password?</button>:null}
+      {role==='doctor'?<button className="button text auth-reset" type="button" disabled={working}
+        onClick={()=>{setRegister(x=>!x);setError('');setNotice('');setPassword('');}}>
+        {register?'Back to Doctor Login':'Register as a doctor'}</button>:null}
     </section>
   </main>;
 }

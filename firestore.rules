@@ -10,7 +10,8 @@ service cloud.firestore {
     }
     function isActiveMember() {
       return hasProfile() && profile().active == true
-        && profile().role in ['admin', 'doctor', 'practitioner'];
+        && profile().role in ['admin', 'doctor', 'practitioner']
+        && (profile().get('registrationMethod','legacy') != 'self' || request.auth.token.email_verified == true);
     }
     function isAdmin() { return isActiveMember() && profile().role == 'admin'; }
     function isDoctor() {
@@ -80,6 +81,36 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
+      // Doctor can request access only for their own inactive profile.
+      allow create: if signedIn() && userId == request.auth.uid
+        && request.auth.token.email is string
+        && request.auth.token.email == request.resource.data.email
+        && request.resource.data.keys().hasOnly(['role','active','displayName','email','createdAt','registrationMethod'])
+        && request.resource.data.keys().hasAll(['role','active','displayName','email','createdAt','registrationMethod'])
+        && request.resource.data.role == 'doctor'
+        && request.resource.data.registrationMethod == 'self'
+        && request.resource.data.active == false
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 120
+        && request.resource.data.createdAt == request.time;
+      // An existing administrator may link a separately verified Auth account as admin.
+      allow create: if isAdmin()
+        && userId != request.auth.uid
+        && request.resource.data.keys().hasOnly(['role','active','displayName','email','createdBy','createdAt','updatedAt','statusUpdatedBy'])
+        && request.resource.data.keys().hasAll(['role','active','displayName','email','createdBy','createdAt','updatedAt','statusUpdatedBy'])
+        && request.resource.data.role == 'admin'
+        && request.resource.data.active == true
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 120
+        && request.resource.data.email is string
+        && request.resource.data.email.size() >= 5
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.statusUpdatedBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
       // Only an active administrator can link an existing Auth UID as a doctor.
       allow create: if isAdmin()
         && userId != request.auth.uid

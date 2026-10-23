@@ -29,6 +29,7 @@ export function subscribePractitionerAccess(
         role,
         displayName: typeof data.displayName === 'string' ? data.displayName : undefined,
         email: typeof data.email === 'string' ? data.email : undefined,
+        registrationMethod: data.registrationMethod === 'self' ? 'self' : undefined,
       });
     },
     onError,

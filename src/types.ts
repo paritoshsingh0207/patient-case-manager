@@ -7,6 +7,7 @@ export interface PractitionerAccess {
   role: AppRole;
   displayName?: string;
   email?: string;
+  registrationMethod?: 'self';
 }
 
 export interface DoctorProfile {
@@ -16,6 +17,7 @@ export interface DoctorProfile {
   displayName: string;
   email: string;
   deleted?: boolean;
+  pending?: boolean;
 }
 
 export interface Patient {

@@ -11,6 +11,7 @@ function doctorFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>): DoctorPro
     displayName:typeof data.displayName==='string'?data.displayName:'Unnamed doctor',
     email:typeof data.email==='string'?data.email:'',
     deleted:data.deleted===true,
+    pending:data.active!==true && !data.statusUpdatedBy,
   };
 }
 export function subscribeDoctors(db:Firestore,onChange:(doctors:DoctorProfile[])=>void,onError:(error:Error)=>void) {
@@ -40,4 +41,13 @@ export async function setPatientDoctors(db:Firestore,input:{patientId:string;doc
   const doctorIds=[...new Set(input.doctorIds)];
   if(doctorIds.length>20||doctorIds.some(id=>!id.trim()))throw Error('Select up to 20 valid doctors.');
   await updateDoc(doc(db,'patients',input.patientId),{doctorIds});
+}
+
+export async function registerAdminProfile(db:Firestore,input:{uid:string;displayName:string;email:string;adminUid:string}) {
+  const uid=input.uid.trim(),displayName=input.displayName.trim(),email=input.email.trim().toLowerCase();
+  if(!/^[A-Za-z0-9_-]{6,128}$/.test(uid)||uid===input.adminUid)throw Error('Enter a separate verified Authentication UID.');
+  if(displayName.length<2||displayName.length>120||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))throw Error('Enter a valid name and email.');
+  await setDoc(doc(db,'users',uid),{role:'admin',active:true,displayName,email,
+    createdBy:input.adminUid,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
+    statusUpdatedBy:input.adminUid});
 }

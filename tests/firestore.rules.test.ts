@@ -396,7 +396,7 @@ describe('Spark admin doctor management, role immutability and revocation',()=>{
     await seedUser('admin','admin');await seedUser('outsider','doctor');
     const a=testEnv.authenticatedContext('admin').firestore();
     const d=testEnv.authenticatedContext('outsider').firestore();
-    await assertFails(setDoc(doc(a,'users/new-admin-uid'),{...makeProfile('new-admin-uid'),role:'admin'}));
+    await assertSucceeds(setDoc(doc(a,'users/new-admin-uid'),{...makeProfile('new-admin-uid'),role:'admin'}));
     await assertFails(updateDoc(doc(a,'users/outsider'),{role:'admin'}));
     await assertFails(updateDoc(doc(d,'users/outsider'),{role:'admin',active:true}));
     await assertFails(setDoc(doc(a,'users/doctor-uid-0003'),{...makeProfile('doctor-uid-0003'),isAdmin:true}));
@@ -416,5 +416,54 @@ describe('Spark admin doctor management, role immutability and revocation',()=>{
     await assertSucceeds(updateDoc(ref,{active:true,updatedAt:serverTimestamp(),statusUpdatedBy:'admin'}));
     await assertSucceeds(getDoc(doc(d,'patients/patient-a')));
     await assertFails(deleteDoc(ref));
+  });
+});
+
+describe('doctor self-registration and admin controls',()=>{
+  it('permits only an inactive doctor profile owned by the signed-in applicant',async()=>{
+    const applicant=testEnv.authenticatedContext('new-doctor',{email:'new-doctor@clinic.test'}).firestore();
+    await assertSucceeds(setDoc(doc(applicant,'users/new-doctor'),{
+      role:'doctor',active:false,displayName:'Dr New Doctor',
+      email:'new-doctor@clinic.test',registrationMethod:'self',createdAt:serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(applicant,'users/new-doctor'),{active:true}));
+    await assertFails(setDoc(doc(applicant,'users/another-user'),{
+      role:'doctor',active:false,displayName:'Other',
+      email:'new-doctor@clinic.test',registrationMethod:'self',createdAt:serverTimestamp(),
+    }));
+  });
+  it('requires existing admin to grant admin role and prevents doctors from promoting themselves',async()=>{
+    await seedUser('admin','admin');await seedUser('saurabh','doctor');
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    const doctor=testEnv.authenticatedContext('saurabh').firestore();
+    const data={
+      role:'admin',active:true,displayName:'Second Administrator',
+      email:'second@example.com',createdBy:'admin',statusUpdatedBy:'admin',
+      createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
+    };
+    await assertSucceeds(setDoc(doc(admin,'users/second-admin'),data));
+    await assertFails(setDoc(doc(doctor,'users/forged-admin'),{...data,createdBy:'saurabh',statusUpdatedBy:'saurabh'}));
+  });
+});
+
+
+describe('pending doctor activation remains admin controlled',()=>{
+  it('lets admin approve a pending doctor but keeps unverified email from reading patients',async()=>{
+    await seedUser('admin','admin');
+    await seedPatient('patient-a',['new-doctor']);
+    const applicant=testEnv.authenticatedContext('new-doctor',{email:'new-doctor@clinic.test',email_verified:false}).firestore();
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    await assertSucceeds(setDoc(doc(applicant,'users/new-doctor'),{
+      role:'doctor',active:false,displayName:'Dr New',email:'new-doctor@clinic.test',
+      registrationMethod:'self',createdAt:serverTimestamp(),
+    }));
+    await assertFails(getDoc(doc(applicant,'patients/patient-a')));
+    await assertSucceeds(updateDoc(doc(admin,'users/new-doctor'),{
+      active:true,updatedAt:serverTimestamp(),statusUpdatedBy:'admin',
+    }));
+    await assertFails(getDoc(doc(applicant,'patients/patient-a')));
+    const verified=testEnv.authenticatedContext('new-doctor',{email:'new-doctor@clinic.test',email_verified:true}).firestore();
+    await assertSucceeds(getDoc(doc(verified,'patients/patient-a')));
+    await assertFails(updateDoc(doc(verified,'users/new-doctor'),{role:'admin'}));
   });
 });

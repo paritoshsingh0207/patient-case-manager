@@ -2897,3 +2897,45 @@ label{font-size:12px;color:#526072;font-weight:600;}
   .admin-doctor-filters {display:grid;grid-template-columns:1fr;}
   .admin-doctor-filters select {width:100%;}
 }
+
+/* Production sign-in and mobile sizing */
+.auth-shell{display:flex!important;align-items:center;justify-content:center;min-height:100dvh;padding:16px;}
+.auth-story{display:none!important;}
+.auth-card{width:min(440px,100%);max-width:100%;padding:clamp(16px,4vw,32px);}
+.auth-role-switch{margin-bottom:20px;}
+html,body,#root{max-width:100%;overflow-x:clip;}
+.app-shell,.workspace-content,.main-area,.workspace-card,.admin-console,.admin-section{min-width:0;max-width:100%;}
+.admin-console{grid-template-columns:minmax(0,1fr)!important;}
+input,textarea,select{max-width:100%;min-width:0;}
+@media(max-width:860px){.workspace-card{padding:clamp(12px,3vw,18px)}.admin-doctor-row{grid-template-columns:36px minmax(0,1fr) auto}.admin-doctor-row .admin-status-button{grid-column:2/-1;justify-self:start}}
+@media(max-width:540px){.patient-tabs{overflow-x:auto;flex-wrap:nowrap}.patient-tabs button{white-space:nowrap;flex-shrink:0}.prescription-item-editor,.characteristic-grid{grid-template-columns:minmax(0,1fr)!important}.overview-stats,.patient-safety,.overview-sections,.access-doctor-grid{grid-template-columns:minmax(0,1fr)}.mobile-nav button{flex:1;min-width:0!important}}
+
+/* Narrow device review: patient details, prescriptions, modals and long identity strings */
+.account-verification-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0;}
+.account-verification-actions p{flex-basis:100%;font-size:12px;}
+.admin-doctor-identity,.doctor-row>div:nth-child(2),.patient-identity,.patient-row-copy{min-width:0;}
+.admin-doctor-identity span,.doctor-row span,.admin-doctor-identity small,.account-name{overflow-wrap:anywhere;}
+@media (max-width:700px){
+  .modal-card{width:calc(100vw - 24px);max-width:calc(100vw - 24px);padding:16px;}
+  .prescription-history-row{grid-template-columns:minmax(0,1fr) auto;gap:8px;}
+  .prescription-history-row>div{grid-column:1/-1;}
+  .prescription-history-row .button{max-width:100%;justify-self:start;}
+  .medicine-code-row{grid-template-columns:60px minmax(0,1fr);gap:9px;}
+  .case-actions,.modal-actions,.admin-actions{flex-wrap:wrap;gap:8px;}
+  .case-actions .button,.modal-actions .button{max-width:100%;}
+  .admin-doctor-filters{flex-wrap:wrap;}
+  .admin-doctor-filters input,.admin-doctor-filters select{width:100%;flex:1 1 100%;}
+  .section-heading>*{min-width:0;}
+  .patient-metrics{flex-wrap:wrap;max-width:100%;}
+}
+@media (max-width:380px){
+  .main-area{padding-left:10px;padding-right:10px;}
+  .workspace-utility{padding-left:10px;padding-right:10px;}
+  .auth-shell{padding:10px;}
+  .auth-card{padding:16px;}
+  .auth-role-switch button{font-size:12px;}
+  .overview-stat strong{font-size:28px;}
+  .admin-doctor-summary{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .admin-doctor-summary>div{padding:8px;}
+  .admin-doctor-summary strong{font-size:22px;}
+}
