@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import type { DoctorProfile, Patient } from '../types';
-import { removePatientDoctorAccess, setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
+import { removePatientDoctorAccess, setDoctorActive, setPatientDoctors, subscribeDoctors, subscribeClinicAudit, type ClinicAuditEvent } from '../services/adminService';
 import { inviteAdministrator } from '../services/provisioningService';
 
 interface AdminConsoleProps {db:Firestore;patients:Patient[];adminUid:string;}
 export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   const [doctors,setDoctors]=useState<DoctorProfile[]>([]);
+  const [activity,setActivity]=useState<ClinicAuditEvent[]>([]);
   const [admins,setAdmins]=useState<{uid:string;displayName:string;email:string}[]>([]);
   const [showAdmin,setShowAdmin]=useState(false);
   const [adminDraft,setAdminDraft]=useState({displayName:'',email:''});
@@ -23,6 +24,7 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   const [removingDoctorUid,setRemovingDoctorUid]=useState<string|null>(null);
 
   useEffect(()=>subscribeDoctors(db,setDoctors,err=>setError(err.message)),[db]);
+  useEffect(()=>subscribeClinicAudit(db,setActivity,err=>setError(err.message)),[db]);
   useEffect(()=>onSnapshot(query(collection(db,'users'),where('role','==','admin')),snap=>
     setAdmins(snap.docs.map(d=>({uid:d.id,displayName:String(d.data().displayName||'Administrator'),email:String(d.data().email||'')}))),err=>setError(err.message)),[db]);
   const visibleDoctors=useMemo(()=>doctors.filter(d=>{
@@ -75,7 +77,7 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
     const patientId=selectedPatient.id;
     setRemovingDoctorUid(doctorUid);setError('');setMessage('');
     try {
-      await removePatientDoctorAccess(db,{patientId,doctorUid});
+      await removePatientDoctorAccess(db,{patientId,doctorUid,adminUid});
       setSelectedDoctorIds(ids=>ids.filter(uid=>uid!==doctorUid));
       setMessage(`${doctorName}'s access to this patient was removed.`);
     }catch(e){setError(e instanceof Error?e.message:'Unable to remove doctor access.');}
@@ -87,7 +89,7 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
     if(unknown.length){setError('This patient has unknown doctor assignments. Verify them before saving.');return;}
     setSavingAccess(true);setError('');setMessage('');
     try {
-      await setPatientDoctors(db,{patientId:selectedPatient.id,doctorIds:selectedDoctorIds});
+      await setPatientDoctors(db,{patientId:selectedPatient.id,doctorIds:selectedDoctorIds,adminUid});
       setMessage('Patient care-team access updated.');
     }catch(e){setError(e instanceof Error?e.message:'Could not update patient access.');}
     finally{setSavingAccess(false);}
@@ -192,6 +194,17 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
           selectedDoctorIds.some(id=>!availableDoctors.some(d=>d.uid===id))} onClick={saveAccess}>
           {savingAccess?'Saving…':'Save assignments'}</button>
       </div></>:<div className="empty-list">Select a patient to manage access.</div>}
+    </section>
+    <section className="workspace-card glass-panel admin-section">
+      <div className="section-heading"><div><h2>Administrative activity</h2></div></div>
+      <div className="admin-activity-list">
+        {activity.map(event=><div className="admin-activity-row" key={event.id}>
+          <strong>{event.action.replaceAll('_',' ')}</strong>
+          <span>{event.targetType} · {event.targetId}</span>
+          <small>{event.recordedAt?.toLocaleString()??'Pending'} · {event.actorUid}</small>
+        </div>)}
+        {!activity.length?<p className="quiet-note">No recorded changes yet.</p>:null}
+      </div>
     </section>
     {error?<div className="inline-error admin-message" role="alert">{error}</div>:null}
     {message?<div className="save-message admin-message" role="status">{message}</div>:null}

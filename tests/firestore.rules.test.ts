@@ -531,3 +531,18 @@ describe('saved prescription history access after sign-in',()=>{
     await assertSucceeds(getDocs(collection(secondDoctor,'patients/patient-a/prescriptions')));
   });
 });
+
+describe('Priority 0: protected administrative activity',()=>{
+ it('allows admin to append records, not edit them, and rejects doctors and spoofing',async()=>{
+  await seedUser('admin','admin');await seedUser('doctor','doctor');
+  const a=testEnv.authenticatedContext('admin').firestore(),d=testEnv.authenticatedContext('doctor').firestore();
+  const event={actorUid:'admin',action:'care_team_changed',targetType:'patient',targetId:'patient-a',recordedAt:serverTimestamp()};
+  await assertSucceeds(setDoc(doc(a,'auditEvents/event1'),event));
+  await assertSucceeds(getDoc(doc(a,'auditEvents/event1')));
+  await assertFails(getDoc(doc(d,'auditEvents/event1')));
+  await assertFails(setDoc(doc(d,'auditEvents/event2'),{...event,actorUid:'doctor'}));
+  await assertFails(setDoc(doc(a,'auditEvents/event3'),{...event,actorUid:'someone'}));
+  await assertFails(updateDoc(doc(a,'auditEvents/event1'),{targetId:'patient-b'}));
+  await assertFails(deleteDoc(doc(a,'auditEvents/event1')));
+ });
+});

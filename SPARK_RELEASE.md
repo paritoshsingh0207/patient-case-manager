@@ -64,3 +64,14 @@ readable for authorized patient caregivers.
 - No Cloud Functions; local Firebase Admin SDK scripts do not deploy.
 - Prescriptions are not a validated medical or pharmacy dispensing system.
 - All rules-authorized database reads count against Spark quotas.
+
+## Phase 0: access activity and disaster recovery
+- Admin can review a recent append-only activity log for doctor activation, deactivation
+  and patient care-team assignments. App writes the log atomically with those changes.
+  This is NOT a complete audit of data reads, offline Admin SDK operations or other apps.
+- Backups are NOT automatically created on the free Firebase Spark plan. Before
+  deploying, maintain an independent encrypted backup of patients, nested clinical
+  collections, users, registry and rules. Verify a restore in a SEPARATE Firebase
+  project. Do not place patient exports in Hosting, source control or unencrypted files.
+- Record the last deployed Hosting version and Firestore rules, and test admin,
+  assigned, unassigned, inactive and revoked-doctor access before release.

@@ -1,9 +1,24 @@
 import {
-  arrayRemove, collection, doc, onSnapshot, query, setDoc, updateDoc, serverTimestamp,
+  arrayRemove, collection, doc, onSnapshot, query, setDoc, updateDoc, serverTimestamp, writeBatch, orderBy, limit,
   type DocumentData, type Firestore, type QueryDocumentSnapshot, where,
 } from 'firebase/firestore';
 import type { DoctorProfile } from '../types';
 
+export interface ClinicAuditEvent {
+  id:string;actorUid:string;action:string;targetType:string;targetId:string;recordedAt?:Date;
+}
+export function subscribeClinicAudit(db:Firestore,onChange:(events:ClinicAuditEvent[])=>void,onError:(error:Error)=>void){
+  return onSnapshot(query(collection(db,'auditEvents'),orderBy('recordedAt','desc'),limit(30)),
+    snap=>onChange(snap.docs.map(item=>{
+      const v=item.data();
+      return {id:item.id,actorUid:String(v.actorUid??''),action:String(v.action??''),
+        targetType:String(v.targetType??''),targetId:String(v.targetId??''),
+        recordedAt:typeof v.recordedAt?.toDate==='function'?v.recordedAt.toDate():undefined};
+    })),onError);
+}
+function addAudit(batch:ReturnType<typeof writeBatch>,db:Firestore,actorUid:string,action:string,targetType:string,targetId:string){
+  batch.set(doc(collection(db,'auditEvents')),{actorUid,action,targetType,targetId,recordedAt:serverTimestamp()});
+}
 function doctorFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>): DoctorProfile {
   const data=snapshot.data();
   return {
@@ -33,14 +48,18 @@ export async function registerDoctorProfile(db:Firestore,input:{uid:string;displ
 /** Only the active flag may change from the browser; audited by Firestore rules. */
 export async function setDoctorActive(db:Firestore,input:{uid:string;active:boolean;adminUid:string}) {
   if(!input.uid||input.uid===input.adminUid)throw Error('Cannot change this account.');
-  await updateDoc(doc(db,'users',input.uid),{
-    active:input.active,updatedAt:serverTimestamp(),statusUpdatedBy:input.adminUid,
-  });
+  const batch=writeBatch(db);
+  batch.update(doc(db,'users',input.uid),{active:input.active,updatedAt:serverTimestamp(),statusUpdatedBy:input.adminUid});
+  addAudit(batch,db,input.adminUid,input.active?'doctor_activated':'doctor_deactivated','doctor',input.uid);
+  await batch.commit();
 }
-export async function setPatientDoctors(db:Firestore,input:{patientId:string;doctorIds:string[]}) {
+export async function setPatientDoctors(db:Firestore,input:{patientId:string;doctorIds:string[];adminUid:string}) {
   const doctorIds=[...new Set(input.doctorIds)];
   if(doctorIds.length>20||doctorIds.some(id=>!id.trim()))throw Error('Select up to 20 valid doctors.');
-  await updateDoc(doc(db,'patients',input.patientId),{doctorIds});
+  const batch=writeBatch(db);
+  batch.update(doc(db,'patients',input.patientId),{doctorIds});
+  addAudit(batch,db,input.adminUid,'care_team_changed','patient',input.patientId);
+  await batch.commit();
 }
 
 export async function registerAdminProfile(db:Firestore,input:{uid:string;displayName:string;email:string;adminUid:string}) {
@@ -55,9 +74,10 @@ export async function registerAdminProfile(db:Firestore,input:{uid:string;displa
 /** Revoke exactly one doctor's access without overwriting concurrent assignments.
  * All patient / case / prescription reads are protected by Firestore rules.
  */
-export async function removePatientDoctorAccess(db:Firestore,input:{patientId:string;doctorUid:string}) {
+export async function removePatientDoctorAccess(db:Firestore,input:{patientId:string;doctorUid:string;adminUid:string}) {
   if(!input.patientId.trim()||!input.doctorUid.trim())throw Error('Choose a valid patient and doctor.');
-  await updateDoc(doc(db,'patients',input.patientId),{
-    doctorIds:arrayRemove(input.doctorUid),updatedAt:serverTimestamp(),
-  });
+  const batch=writeBatch(db);
+  batch.update(doc(db,'patients',input.patientId),{doctorIds:arrayRemove(input.doctorUid),updatedAt:serverTimestamp()});
+  addAudit(batch,db,input.adminUid,'doctor_patient_access_revoked','patient',input.patientId);
+  await batch.commit();
 }

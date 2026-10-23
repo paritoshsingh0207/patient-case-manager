@@ -2979,3 +2979,8 @@ input,textarea,select{max-width:100%;min-width:0;}
  .prescription-saved-detail{padding:12px;}
 }
 @media print{.prescription-saved-detail,.prescription-history-entry{visibility:hidden!important;}}
+
+.admin-activity-list{display:grid;gap:8px;margin-top:14px}
+.admin-activity-row{padding:12px;border:1px solid var(--line);border-radius:8px;display:grid;gap:4px;background:#fffefa;min-width:0}
+.admin-activity-row strong{font-size:12px;text-transform:capitalize}
+.admin-activity-row span,.admin-activity-row small{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
