@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { prescriptionFromData } from '../services/prescriptionService';
 import { PrintablePrescription, SavedPrescriptionDetails, medicineDisplayLabel } from '../components/PrescriptionViews';
 import type { MedicineCode, Patient, PrescriptionRecord } from '../types';
 
@@ -42,5 +43,32 @@ describe('saved prescription and printed prescription separation',()=>{
       medicines={[medicine]}/>);
     expect(html).toContain('Voided');
     expect(html).toContain('Incorrect record');
+  });
+});
+
+describe('historical prescription data visibility',()=>{
+  it('reads a previously saved single-code record with a timestamp date',()=>{
+    const record=prescriptionFromData({
+      medicineCode:'BE1',issuedByName:'Dr Archived',
+      issuedAt:{toDate:()=>new Date('2026-10-20T12:00:00Z')},
+      potency:'30C',dosageForm:'drops',directions:'Follow the written schedule',
+      patientInstructions:'Review in one week',
+    },'patient-a','historical');
+    expect(record.issuedAt).toBe('2026-10-20');
+    expect(record.items[0]?.code).toBe('BE1');
+    const html=renderToStaticMarkup(<SavedPrescriptionDetails record={record} medicines={[medicine]}/>);
+    expect(html).toContain('BE1 — Belladonna');
+    expect(html).toContain('Dr Archived');
+    expect(html).toContain('Follow the written schedule');
+  });
+  it('parses current records and tolerates missing historical fields',()=>{
+    const record=prescriptionFromData({
+      medicineCode:'BE1',issuedAt:'2026-10-23',issuedByName:'Dr Saved',
+      items:[{code:'BE1',potency:'6C',dosageForm:'globules',directions:'clinician direction',quantity:'5 days'}],
+    },'patient-a','saved');
+    expect(record.items).toHaveLength(1);
+    expect(record.issuedAt).toBe('2026-10-23');
+    expect(record.items[0]?.potency).toBe('6C');
+    expect(prescriptionFromData({},'patient-a','empty').items).toEqual([]);
   });
 });
