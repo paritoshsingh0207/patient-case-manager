@@ -610,6 +610,13 @@ describe('patient profile edits preserve care-team security', () => {
     await assertFails(updateDoc(doc(assigned,'patients/patient-edit'), {
       createdBy: 'assigned',
     }));
+    await assertFails(updateDoc(doc(assigned,'patients/patient-edit'), {
+      privateFlag: 'forged', updatedAt: serverTimestamp(),
+    }));
+    // Recording a new consultation may still refresh the patient's activity time.
+    await assertSucceeds(updateDoc(doc(assigned,'patients/patient-edit'), {
+      updatedAt: serverTimestamp(),
+    }));
     await assertSucceeds(getDoc(doc(assigned,'patients/patient-edit/cases/case-1')));
   });
 });
