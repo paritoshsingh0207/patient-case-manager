@@ -17,6 +17,7 @@ import { AdminConsole } from './components/AdminConsole';
 import { MedicineCodeManager } from './components/MedicineCodeManager';
 import { PrescriptionPanel } from './components/PrescriptionPanel';
 import { FollowUpPanel } from './components/FollowUpPanel';
+import { DuplicateReviewPanel } from './components/DuplicateReviewPanel';
 import { patientInputFromRecord } from './lib/patientEdits';
 import { hasWorkspaceAccess, matchesLoginRole, subscribePractitionerAccess, type LoginRole } from './services/accessService';
 import {
@@ -63,6 +64,7 @@ export default function App() {
   const [accessChecked, setAccessChecked] = useState(false);
   const [activeView, setActiveView] = useState<WorkspaceView>('overview');
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [patientDirectoryReady, setPatientDirectoryReady] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [showPatientForm, setShowPatientForm] = useState(false);
@@ -121,11 +123,13 @@ export default function App() {
   useEffect(() => {
     if (!user || !db || !authorized || !accessProfile) {
       setPatients([]);
+      setPatientDirectoryReady(false);
       setSelectedPatientId(null);
       setEditingPatient(null);
       return;
     }
 
+    setPatientDirectoryReady(false);
     return subscribePatients(
       db,
       user.uid,
@@ -133,15 +137,19 @@ export default function App() {
       (nextPatients) => {
         setDataError('');
         setPatients(nextPatients);
+        setPatientDirectoryReady(true);
         setSelectedPatientId((current) =>
           current && nextPatients.some((patient) => patient.id === current)
             ? current
             : nextPatients[0]?.id ?? null,
         );
       },
-      (error) => setDataError('code' in error && error.code === 'permission-denied'
-        ? 'Your patient list could not be loaded. Check account approval and ensure the latest Firestore rules are deployed.'
-        : error.message),
+      (error) => {
+        setPatientDirectoryReady(false);
+        setDataError('code' in error && error.code === 'permission-denied'
+          ? 'Your patient list could not be loaded. Check account approval and ensure the latest Firestore rules are deployed.'
+          : error.message);
+      },
     );
   }, [user, authorized, accessProfile]);
 
@@ -211,8 +219,9 @@ export default function App() {
     activeUser.email?.split('@')[0] ||
     (isAdmin ? 'Administrator' : 'Doctor');
 
-  async function addPatient(input: PatientInput) {
-    const result = await createPatient(activeDb, activeUser.uid, activeProfile.role, input);
+  async function addPatient(input: PatientInput, confirmedPotentialDuplicate = false) {
+    if (!patientDirectoryReady) throw Error('The patient directory must load before creating a record.');
+    const result = await createPatient(activeDb, activeUser.uid, activeProfile.role, input, confirmedPotentialDuplicate);
     setSelectedPatientId(result.id);
     setShowPatientForm(false);
   }
@@ -328,18 +337,25 @@ export default function App() {
           />
         ) : null}
 
-        {activeView === 'admin' && isAdmin ? (
+        {activeView === 'admin' && isAdmin ? (<>
+          <DuplicateReviewPanel patients={patients} onOpenPatient={(id) => {
+            setSelectedPatientId(id); setActiveView('patients');
+          }} />
           <AdminConsole
             db={activeDb}
             patients={patients}
             adminUid={activeUser.uid}
           />
-        ) : null}
+        </>) : null}
         </main>
       </div>
 
       {showPatientForm ? (
-        <PatientForm onSubmit={addPatient} onCancel={() => setShowPatientForm(false)} />
+        <PatientForm onSubmit={addPatient} onCancel={() => setShowPatientForm(false)}
+          possiblePatients={patients} patientDirectoryReady={patientDirectoryReady}
+          onOpenExisting={(id) => {
+            setSelectedPatientId(id); setActiveView('patients'); setShowPatientForm(false);
+          }} />
       ) : null}
       {editingPatient ? (
         <PatientForm key={editingPatient.id} initialPatient={editingPatient}
