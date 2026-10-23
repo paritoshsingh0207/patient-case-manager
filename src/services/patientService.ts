@@ -133,7 +133,7 @@ export async function createPatient(
   userId: string,
   role: AppRole,
   input: PatientInput,
-  confirmedPotentialDuplicate = false,
+  reviewedMatchIds: string[] = [],
 ) {
   validatePatientInput(input);
   // The fresh server read blocks creation when the directory cannot be checked.
@@ -144,8 +144,8 @@ export async function createPatient(
     : query(collection(db, 'patients'), where('doctorIds', 'array-contains', userId));
   const latest = await getDocsFromServer(patientsQuery);
   const matches = findPotentialDuplicates(input, latest.docs.map(patientFromDoc));
-  if (matches.length && !confirmedPotentialDuplicate) {
-    throw Error('A potential duplicate was found in the latest directory. Review existing charts before creating a new record.');
+  if (matches.some(match => !reviewedMatchIds.includes(match.patient.id))) {
+    throw Error('A new or unreviewed potential duplicate exists in the latest directory. Review existing charts before creating a new record.');
   }
   return addDoc(collection(db, 'patients'), {
     ...input,
