@@ -25,4 +25,5 @@ jobs:
       - run: for file in functions/scripts/*.cjs; do node --check "$file"; done
       - run: npm test
       - run: npm run test:rules
+      - run: npm run test:storage
       - run: npm run build

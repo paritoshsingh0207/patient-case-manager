@@ -2,6 +2,7 @@ import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
 import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
 import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore';
+import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,6 +17,7 @@ let app: FirebaseApp | undefined;
 let appCheck: AppCheck | undefined;
 let auth: Auth | undefined;
 let db: Firestore | undefined;
+let storage: FirebaseStorage | undefined;
 if (firebaseReady) {
   app = getApps().length ? getApp() : initializeApp(firebaseConfig);
   if (appCheckSiteKey && typeof window !== 'undefined') {
@@ -26,6 +28,11 @@ if (firebaseReady) {
   }
   auth = getAuth(app);
   db = getFirestore(app);
+  // Never guess the medical file bucket. Explicit opt-in on Blaze only.
+  const configuredBucket = (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '').trim();
+  if (/^[a-z0-9][a-z0-9._-]{2,220}$/i.test(configuredBucket)) {
+    storage = getStorage(app, 'gs://' + configuredBucket);
+  }
   // Explicit opt-in for local smoke tests only. Never route a real Firebase
   // project or a production build into the emulators.
   if (import.meta.env.DEV &&
@@ -33,6 +40,7 @@ if (firebaseReady) {
       firebaseConfig.projectId === 'demo-patient-case-manager') {
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
     connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    if (storage) connectStorageEmulator(storage, '127.0.0.1', 9199);
   }
 }
-export { app, appCheck, auth, db };
+export { app, appCheck, auth, db, storage };

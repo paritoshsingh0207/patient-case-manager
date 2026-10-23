@@ -1,71 +1,40 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function hasProfile() {
-      return request.auth != null
-        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid));
-    }
-
-    function profile() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
-    }
-
+    // Rules read only two distinct Firestore documents per request:
+    // the caller's active user profile and the parent patient chart.
     function isActiveMember() {
-      return hasProfile()
-        && profile().active == true
-        && profile().role in ['admin', 'doctor', 'practitioner'];
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+           in ['admin', 'doctor', 'practitioner']
+        && (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data
+               .get('registrationMethod', 'legacy') != 'self'
+            || request.auth.token.email_verified == true);
     }
-
-    function isAdmin() {
-      return isActiveMember() && profile().role == 'admin';
-    }
-
-    function isDoctor() {
-      return isActiveMember() && profile().role in ['doctor', 'practitioner'];
-    }
-
-    function patientExists(patientId) {
-      return firestore.exists(/databases/(default)/documents/patients/$(patientId));
-    }
-
     function canAccessPatient(patientId) {
       return isActiveMember()
-        && patientExists(patientId)
-        && (
-          isAdmin()
-          || (
-            isDoctor()
-            && request.auth.uid in firestore.get(
-              /databases/(default)/documents/patients/$(patientId)
-            ).data.doctorIds
-          )
-        );
+        && firestore.exists(/databases/(default)/documents/patients/$(patientId))
+        && (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
+            || request.auth.uid in
+              firestore.get(/databases/(default)/documents/patients/$(patientId)).data.doctorIds);
     }
-
-    function allowedAttachment() {
-      return request.resource.size <= 15 * 1024 * 1024
-        && request.resource.contentType != null
-        && (
-          request.resource.contentType.matches('image/.*')
-          || request.resource.contentType == 'application/pdf'
-        );
-    }
-
-    match /patients/{patientId}/users/{uploaderId}/{allPaths=**} {
-      allow read: if canAccessPatient(patientId);
-      allow create, update: if isDoctor()
+    match /patientFiles/{patientId}/{fileId} {
+      allow get: if canAccessPatient(patientId);
+      allow list: if false;
+      // Each original file is immutable. No client overwrite, delete or change.
+      allow create: if resource == null
         && canAccessPatient(patientId)
-        && request.auth.uid == uploaderId
-        && allowedAttachment();
-      allow delete: if isAdmin()
-        || (
-          isDoctor()
-          && canAccessPatient(patientId)
-          && request.auth.uid == uploaderId
-        );
+        && fileId.matches('^[A-Za-z0-9_-]{15,100}$')
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType in ['application/pdf', 'image/jpeg', 'image/png']
+        && request.resource.metadata.createdBy == request.auth.uid
+        && request.resource.metadata.patientId == patientId;
+      allow update, delete: if false;
     }
-
-    match /{allPaths=**} {
+    match /{other=**} {
       allow read, write: if false;
     }
   }

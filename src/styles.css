@@ -3099,3 +3099,21 @@ input,textarea,select{max-width:100%;min-width:0;}
     white-space: nowrap;
   }
 }
+
+/* Patient-specific private clinical attachments */
+.patient-attachments { display: grid; gap: 16px; min-width: 0; }
+.attachment-upload-form { display: grid; gap: 12px; max-width: 680px; }
+.attachment-upload-form label { display: grid; gap: 5px; }
+.attachment-upload-form input[type=file] { min-width: 0; width: 100%; }
+.attachment-upload-form .button { justify-self: start; }
+.attachment-upload-form progress { width: 100%; height: 12px; accent-color: var(--green); }
+.attachment-record-list { display: grid; gap: 10px; }
+.attachment-record { display: flex; justify-content: space-between; align-items: center; gap: 14px;
+  min-width: 0; background: #fffefb; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.attachment-record-info { display: grid; gap: 4px; min-width: 0; }
+.attachment-record-info strong { overflow-wrap: anywhere; font-size: 13px; }
+.attachment-record-info small { color: var(--muted); font-size: 11px; }
+.attachment-record-info p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-size: 12px; }
+.attachment-record .button { flex-shrink: 0; }
+@media (max-width: 540px) { .attachment-record { flex-wrap: wrap; align-items: flex-start; }
+  .attachment-record .button { width: 100%; } }
