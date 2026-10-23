@@ -639,7 +639,9 @@ describe('patient duplicate warnings and privacy boundary', () => {
       .rejects.toThrow(/potential duplicate/i);
     await expect(createPatient(admin,'admin','admin',candidate))
       .rejects.toThrow(/potential duplicate/i);
-    const result = await createPatient(doctor,'assigned','doctor',candidate,true);
+    await expect(createPatient(doctor,'assigned','doctor',candidate,['wrong-chart']))
+      .rejects.toThrow(/unreviewed potential duplicate/i);
+    const result = await createPatient(doctor,'assigned','doctor',candidate,['existing']);
     const saved = await assertSucceeds(getDoc(doc(doctor,'patients',result.id)));
     expect(saved.exists()).toBe(true);
   });
