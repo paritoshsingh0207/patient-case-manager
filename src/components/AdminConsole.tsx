@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import type { DoctorProfile, Patient } from '../types';
-import { registerDoctorProfile, setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
+import { setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
 import { inviteAdministrator } from '../services/provisioningService';
 
 interface AdminConsoleProps {db:Firestore;patients:Patient[];adminUid:string;}
@@ -15,9 +15,6 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   const [error,setError]=useState('');
   const [search,setSearch]=useState('');
   const [statusFilter,setStatusFilter]=useState<'all'|'active'|'inactive'>('all');
-  const [showAdd,setShowAdd]=useState(false);
-  const [draft,setDraft]=useState({uid:'',displayName:'',email:''});
-  const [confirmedAuthUid,setConfirmedAuthUid]=useState(false);
   const [creating,setCreating]=useState(false);
   const [busyUid,setBusyUid]=useState<string|null>(null);
   const [selectedPatientId,setSelectedPatientId]=useState('');
@@ -45,16 +42,6 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   },[patients,selectedPatientId]);
   useEffect(()=>setSelectedDoctorIds(selectedPatient?.doctorIds??[]),[selectedPatient]);
 
-  async function addDoctor(event:FormEvent) {
-    event.preventDefault();if(!confirmedAuthUid)return;
-    setCreating(true);setError('');setMessage('');
-    try {
-      await registerDoctorProfile(db,{...draft,adminUid});
-      setMessage('Doctor profile added. They can now sign in using their existing Firebase Authentication credentials.');
-      setDraft({uid:'',displayName:'',email:''});setConfirmedAuthUid(false);setShowAdd(false);
-    }catch(e){setError(e instanceof Error?e.message:'Could not add doctor profile. Check UID and existing records.');}
-    finally{setCreating(false);}
-  }
   async function addAdmin(event:FormEvent) {
     event.preventDefault();setCreating(true);setError('');setMessage('');
     try {
@@ -68,11 +55,13 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   async function changeStatus(doctor:DoctorProfile) {
     if(!window.confirm(doctor.active
       ? `Deactivate ${doctor.displayName}? They will lose access to patient records immediately. Existing assignments are retained until removed.`
-      : `Reactivate ${doctor.displayName}? Existing assigned patients may become accessible again immediately.`))return;
+      : doctor.pending
+        ? `Approve ${doctor.displayName}? Confirm their identity and email before granting clinic access.`
+        : `Reactivate ${doctor.displayName}? Existing assigned patients may become accessible again immediately.`))return;
     setBusyUid(doctor.uid);setMessage('');setError('');
     try {
       await setDoctorActive(db,{uid:doctor.uid,active:!doctor.active,adminUid});
-      setMessage(doctor.active?'Doctor access deactivated.':'Doctor access reactivated.');
+      setMessage(doctor.active?'Doctor access deactivated.':doctor.pending?'Doctor approved. The doctor must also verify their email before accessing patient records.':'Doctor access reactivated.');
     }catch(e){setError(e instanceof Error?e.message:'Unable to change doctor access.');}
     finally{setBusyUid(null);}
   }
@@ -92,38 +81,14 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   return <div className="admin-console">
     <section className="workspace-card glass-panel admin-section">
       <div className="section-heading admin-doctor-heading">
-        <div><p className="eyebrow">CLINIC ACCESS</p><h2>Doctor management</h2>
-          <p className="section-copy">Add doctors, control access, and review their patient assignments.</p></div>
-        <button type="button" className="button primary" onClick={()=>setShowAdd(x=>!x)}>
-          {showAdd?'Cancel':' + Add doctor'}</button>
+        <div><h2>Doctor approvals</h2>
+          <p className="section-copy">Doctors register from the Doctor Login screen. Review new registrations here, approve access, and assign patients.</p></div>
       </div>
       <div className="admin-doctor-summary">
         <div><strong>{availableDoctors.length}</strong><span>Total doctors</span></div>
         <div><strong>{activeDoctors.length}</strong><span>Active</span></div>
         <div><strong>{pendingDoctors.length}</strong><span>Pending approval</span></div>
       </div>
-      {showAdd?<form className="admin-add-doctor" onSubmit={addDoctor}>
-        <h3>Existing doctor account</h3>
-        <p className="section-copy">New doctors should register from the login page. Their applications appear as inactive until you activate them below. You can also link a separate existing Firebase Authentication UID here.</p>
-        <label>Firebase Authentication UID
-          <input required minLength={6} maxLength={128} value={draft.uid}
-            onChange={e=>setDraft({...draft,uid:e.target.value})} placeholder="Paste exact UID from Firebase Authentication"/>
-        </label>
-        <label>Doctor's full name
-          <input required minLength={2} maxLength={120} value={draft.displayName}
-            onChange={e=>setDraft({...draft,displayName:e.target.value})} placeholder="Dr. Full Name"/>
-        </label>
-        <label>Doctor's Firebase login email
-          <input required type="email" value={draft.email}
-            onChange={e=>setDraft({...draft,email:e.target.value})} placeholder="doctor@clinic.com"/>
-        </label>
-        <label className="admin-verify-account">
-          <input type="checkbox" checked={confirmedAuthUid} onChange={e=>setConfirmedAuthUid(e.target.checked)}/>
-          <span>I verified that this UID and email belong to the intended doctor in Firebase Authentication.</span>
-        </label>
-        <button className="button primary" type="submit" disabled={creating||!confirmedAuthUid}>
-          {creating?'Adding…':'Activate doctor account'}</button>
-      </form>:null}
       <div className="admin-doctor-filters">
         <input type="search" aria-label="Search doctors" value={search}
           onChange={e=>setSearch(e.target.value)} placeholder="Search name, email or UID"/>
