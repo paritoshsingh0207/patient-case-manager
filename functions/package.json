@@ -4,7 +4,8 @@
   "scripts": {
     "audit:legacy": "node scripts/audit-legacy-patients.cjs",
     "import:medicines": "node scripts/import-verified-medicines.cjs",
-    "manage:doctor": "node scripts/manage-doctor.cjs"
+    "manage:doctor": "node scripts/manage-doctor.cjs",
+    "backup": "node scripts/clinic-backup.cjs"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0"

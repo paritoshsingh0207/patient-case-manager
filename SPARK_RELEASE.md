@@ -75,3 +75,17 @@ readable for authorized patient caregivers.
   project. Do not place patient exports in Hosting, source control or unencrypted files.
 - Record the last deployed Hosting version and Firestore rules, and test admin,
   assigned, unassigned, inactive and revoked-doctor access before release.
+
+## Recovery tools and limitations
+1. Use functions/scripts/clinic-backup.cjs export to encrypt all case-manager
+   documents, including nested patient data, on a trusted administrator computer.
+2. Immediately run verify against the encrypted file, and record totals, digest,
+   project, timestamp, custodian and encrypted offline storage location.
+3. Keep the passphrase separately in a password vault. Test restore only in a
+   fresh isolated staging project. The tool refuses production restores.
+4. Restore does not provide Firebase Authentication user accounts, Hosting,
+   rules, indexes or Storage. Review these independently before disaster recovery.
+5. Backups are still manual. Unattended scheduling requires an approved secure
+   secret store, a monitored workstation, retention policy and responsible staff.
+6. The app's auditEvents are client-submitted change records, not a complete,
+   independent audit of read access or privileged Firebase Admin actions.
