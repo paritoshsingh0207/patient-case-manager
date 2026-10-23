@@ -6,7 +6,8 @@ import { deleteObject, getMetadata, listAll, ref, uploadBytes } from 'firebase/s
 
 let env: RulesTestEnvironment;
 const bucket = 'gs://demo-patient-case-manager.firebasestorage.app';
-const filePath = 'patientFiles/patient-a/attachmentABC123456789';
+let filePath = 'patientFiles/patient-a/attachmentABC123456789';
+let sequence = 0;
 const pdf = new Uint8Array([37,80,68,70,45,49,46,52]);
 beforeAll(async () => {
   env = await initializeTestEnvironment({
@@ -16,6 +17,9 @@ beforeAll(async () => {
   });
 });
 beforeEach(async () => {
+  // clearStorage only clears the emulator's default bucket. This suite uses an
+  // explicitly named bucket, so choose an immutable fresh path per test.
+  filePath = 'patientFiles/patient-a/attachmentABC123456789' + (++sequence);
   await env.clearStorage();await env.clearFirestore();
   await env.withSecurityRulesDisabled(async ctx => {
     for(const [uid,role,active] of [
