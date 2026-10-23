@@ -7,9 +7,8 @@ or Cloud Storage. The functions/ directory holds trusted offline admin scripts.
 
 ## Architecture
 
-- Authentication: email/password with no public registration.
-- Firestore users/{uid}: trusted offline provisioning of admin and doctor profiles.
-  Browser writes to any user role are forbidden.
+- Authentication: separate administrator and doctor email/password sign-in; doctor self-registration creates inactive profiles pending admin approval and email verification.
+- Firestore users/{uid}: self-registered doctors remain inactive until approval; authorized admins can manage accounts and invite other administrators. Firestore rules prevent clinician self-promotion.
 - Firestore patients/{id}: administrator controls doctorIds; doctors see only assigned patients.
 - Firestore medicineCodes/{AB1...}: immutable approved mappings and legacy B aliases.
   Browser writes are forbidden.
@@ -18,7 +17,10 @@ or Cloud Storage. The functions/ directory holds trusted offline admin scripts.
   record the issuing doctor, potency, form, directions, date, and review attestation.
   Historical multi-item records remain readable. Incorrect prescriptions may be
   voided with an audit reason but cannot be silently deleted or changed.
-- No file attachments / Cloud Storage feature.
+- Internal per-patient clinical follow-up tracker (due date, reason and completion) without public booking, messaging or appointment intake; the Awakening website owns booking.
+- Structured case assessments (vitals, assessment, plan) and read-only comparison with previous consultations. Signed previous cases remain immutable.
+- Append-only recent admin activity for doctor status and patient access changes; this does not replace server-side comprehensive audit logging.
+- No file attachments / Cloud Storage feature, automated backups, or backup restoration tooling.
 
 ## Setup
 
@@ -90,3 +92,15 @@ Important: this is not a validated medical decision support, medication
 interaction checking or pharmacy record system. Patient copies now display
 both the clinic code and the full medicine name to support safer identification.
 Homeopathy should not delay necessary evidence-based care.
+
+## Patient case-management boundaries and recovery
+
+This application does not process online bookings or send external follow-up messages;
+the Awakening website handles booking. Internal follow-ups are notes/tasks attached
+to existing patients, not booked appointments.
+
+Before every production rules or Hosting deployment, follow the backup and disaster-
+recovery checklist in SPARK_RELEASE.md. Firestore data is not automatically backed
+up by this app. Do not treat the in-app activity list as a complete log of reads or
+privileged changes. Test patient access removal and verify restore in a separate
+Firebase project before relying on a backup.

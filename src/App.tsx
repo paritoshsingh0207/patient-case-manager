@@ -480,15 +480,16 @@ function PatientWorkspace({
             </nav>
             {patientTab==='history'?<CaseTimeline cases={cases}/>:null}
             {patientTab==='consultation'&&isDoctor?<CaseEditor
+              key={selectedPatient.id}
               patientName={selectedPatient.firstName+' '+selectedPatient.lastName}
               previousCases={cases}
               onSaveCase={addCase}
               onSaveSuggestion={persistSuggestion}
             />:null}
-            {patientTab==='followups'?<FollowUpPanel db={db} patientId={selectedPatient.id}
+            {patientTab==='followups'?<FollowUpPanel key={selectedPatient.id} db={db} patientId={selectedPatient.id}
               userId={userId} canManage={isDoctor}/>:null}
             {patientTab==='prescriptions'?<PrescriptionPanel
-              db={db} patient={selectedPatient} userId={userId} practitionerName={practitionerName}
+              key={selectedPatient.id} db={db} patient={selectedPatient} userId={userId} practitionerName={practitionerName}
               canPrescribe={isDoctor}
             />:null}
           </>
