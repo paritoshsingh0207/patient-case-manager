@@ -1,6 +1,7 @@
 import fs from 'node:fs';
+import { createPatient } from '../src/services/patientService';
 import path from 'node:path';
-import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   assertFails,
   assertSucceeds,
@@ -618,5 +619,46 @@ describe('patient profile edits preserve care-team security', () => {
       updatedAt: serverTimestamp(),
     }));
     await assertSucceeds(getDoc(doc(assigned,'patients/patient-edit/cases/case-1')));
+  });
+});
+
+describe('patient duplicate warnings and privacy boundary', () => {
+  it('blocks a possible duplicate for an assigned doctor and admin until staff explicitly acknowledges it', async () => {
+    await seedUser('admin','admin');
+    await seedUser('assigned','doctor');
+    await seedPatient('existing',['assigned']);
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await updateDoc(doc(ctx.firestore(),'patients/existing'), {
+        firstName:'Anita',lastName:'Sharma',dateOfBirth:'1984-03-14',phone:'9876543210',
+      });
+    });
+    const doctor = testEnv.authenticatedContext('assigned').firestore();
+    const admin = testEnv.authenticatedContext('admin').firestore();
+    const candidate = { firstName:' anita ',lastName:'SHARMA',dateOfBirth:'1984-03-14',phone:'+91 9876543210' };
+    await expect(createPatient(doctor,'assigned','doctor',candidate))
+      .rejects.toThrow(/potential duplicate/i);
+    await expect(createPatient(admin,'admin','admin',candidate))
+      .rejects.toThrow(/potential duplicate/i);
+    const result = await createPatient(doctor,'assigned','doctor',candidate,true);
+    const saved = await assertSucceeds(getDoc(doc(doctor,'patients',result.id)));
+    expect(saved.exists()).toBe(true);
+  });
+
+  it('does not expose another doctor\'s chart during a duplicate check', async () => {
+    await seedUser('assigned','doctor');
+    await seedUser('other','doctor');
+    await seedPatient('restricted',['assigned']);
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await updateDoc(doc(ctx.firestore(),'patients/restricted'), {
+        firstName:'Anita',lastName:'Sharma',dateOfBirth:'1984-03-14',
+      });
+    });
+    const other = testEnv.authenticatedContext('other').firestore();
+    const candidate = { firstName:'Anita',lastName:'Sharma',dateOfBirth:'1984-03-14' };
+    await assertFails(getDoc(doc(other,'patients/restricted')));
+    // A doctor cannot query unassigned records. Cross-doctor duplicate review
+    // therefore belongs to admins and is not falsely presented as guaranteed.
+    const created = await createPatient(other,'other','doctor',candidate);
+    expect((await getDoc(doc(other,'patients',created.id))).exists()).toBe(true);
   });
 });
