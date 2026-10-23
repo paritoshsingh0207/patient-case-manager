@@ -505,3 +505,29 @@ describe('live Firestore collection queries and per-patient revocation',()=>{
     await assertSucceeds(updateDoc(doc(a,'patients/legacy'),{doctorIds:[]}));
   });
 });
+
+describe('saved prescription history access after sign-in',()=>{
+  it('allows authorized doctors to list saved prescriptions, including records authored by another doctor',async()=>{
+    await seedUser('doctor-1','doctor');await seedUser('doctor-2','doctor');await seedUser('admin','admin');
+    await seedPatient('patient-a',['doctor-1','doctor-2']);
+    await testEnv.withSecurityRulesDisabled(async context=>{
+      const db=context.firestore();
+      await setDoc(doc(db,'patients/patient-a/prescriptions/historical-rx'),{
+        patientId:'patient-a',createdBy:'doctor-1',issuedByName:'Doctor One',
+        issuedAt:'2026-10-20',medicineCode:'BE1',
+        items:[{code:'BE1',potency:'30C',dosageForm:'drops',directions:'As prescribed',quantity:'7 days'}],
+      });
+    });
+    const sameDoctor=testEnv.authenticatedContext('doctor-1').firestore();
+    const secondDoctor=testEnv.authenticatedContext('doctor-2').firestore();
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    for(const access of [sameDoctor,secondDoctor,admin]){
+      const results=await assertSucceeds(getDocs(collection(access,'patients/patient-a/prescriptions')));
+      if(results.size!==1||results.docs[0].id!=='historical-rx')throw Error('Saved prescription not visible');
+      await assertSucceeds(getDoc(doc(access,'patients/patient-a/prescriptions/historical-rx')));
+    }
+    await assertSucceeds(updateDoc(doc(admin,'patients/patient-a'),{doctorIds:['doctor-2']}));
+    await assertFails(getDocs(collection(sameDoctor,'patients/patient-a/prescriptions')));
+    await assertSucceeds(getDocs(collection(secondDoctor,'patients/patient-a/prescriptions')));
+  });
+});

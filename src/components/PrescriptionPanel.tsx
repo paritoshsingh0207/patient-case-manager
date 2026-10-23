@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import type { Firestore } from 'firebase/firestore';
 import type { MedicineCode, Patient, PrescriptionItem, PrescriptionRecord } from '../types';
 import { subscribeMedicineCodes } from '../services/medicineService';
+import { PrintablePrescription, SavedPrescriptionDetails, medicineDisplayLabel } from './PrescriptionViews';
 import {
   createPrescription,
   voidPrescription,
@@ -15,10 +17,6 @@ interface PrescriptionPanelProps {
   practitionerName: string;
   canPrescribe: boolean;
 }
-
-const clinicName = import.meta.env.VITE_CLINIC_NAME?.trim() || 'Clinic';
-const clinicAddress = import.meta.env.VITE_CLINIC_ADDRESS?.trim() || '';
-const clinicContact = import.meta.env.VITE_CLINIC_CONTACT?.trim() || '';
 
 function localDate() {
   const now = new Date();
@@ -46,25 +44,45 @@ export function PrescriptionPanel({
   const [saving, setSaving] = useState(false);
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [printable, setPrintable] = useState<PrescriptionRecord | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [historyError, setHistoryError] = useState('');
+  const [registryError, setRegistryError] = useState('');
 
   useEffect(() => {
+    setLoadingHistory(true);
+    setHistoryError('');
+    setRegistryError('');
+    setPrescriptions([]);
+    setViewingId(null);
     const unsubscribeCodes = subscribeMedicineCodes(
       db,
-      setMedicineCodes,
-      (error) => setMessage(error.message),
+      (codes) => { setMedicineCodes(codes); setRegistryError(''); },
+      () => setRegistryError('Medicine names could not be loaded from the registry.'),
     );
     const unsubscribePrescriptions = subscribePrescriptions(
       db,
       patient.id,
-      setPrescriptions,
-      (error) => setMessage(error.message),
+      (records) => {
+        setPrescriptions(records);
+        setHistoryError('');
+        setLoadingHistory(false);
+      },
+      (error) => {
+        setLoadingHistory(false);
+        setHistoryError(error.message || 'Could not load saved prescriptions.');
+      },
     );
 
-    return () => {
-      unsubscribeCodes();
-      unsubscribePrescriptions();
-    };
+    return () => { unsubscribeCodes(); unsubscribePrescriptions(); };
   }, [db, patient.id]);
+
+  useEffect(() => {
+    if (!printable) return;
+    const clear = () => setPrintable(null);
+    window.addEventListener('afterprint', clear);
+    return () => window.removeEventListener('afterprint', clear);
+  }, [printable]);
 
   const activeCodes = useMemo(
     () => medicineCodes.filter((item) => item.active && item.approvedForNewRx),
@@ -107,8 +125,9 @@ export function PrescriptionPanel({
 
   function printPrescription(record: PrescriptionRecord) {
     if (record.voidedAt) return;
-    setPrintable(record);
-    window.setTimeout(() => window.print(), 80);
+    // Commit the code-only print document before invoking the browser print dialog.
+    flushSync(() => setPrintable(record));
+    window.print();
   }
 
   async function handleVoid(record: PrescriptionRecord) {
@@ -125,9 +144,9 @@ export function PrescriptionPanel({
   }
 
   function internalName(code: string) {
-    const primary = medicineCodes.find((item) => item.code === code);
-    const historical = medicineCodes.find((item) => item.legacyCode === code);
-    return primary?.remedyName ?? historical?.remedyName ?? '';
+    const match = medicineCodes.find(item => item.code === code)
+      ?? medicineCodes.find(item => item.legacyCode === code);
+    return match?.remedyName ?? '';
   }
 
   return (
@@ -238,84 +257,47 @@ export function PrescriptionPanel({
 
         <div className="prescription-history">
           <div className="section-heading compact">
-            <div>
-              <p className="eyebrow">History</p>
-              <h3>Saved prescriptions</h3>
-            </div>
-            <span className="quiet-note">{prescriptions.length} entries</span>
+            <div><p className="eyebrow">History</p><h3>Saved prescriptions</h3></div>
+            <span className="quiet-note">{loadingHistory?'Loading…':`${prescriptions.length} entries`}</span>
           </div>
-
-          {prescriptions.map((record) => (
-            <article className="prescription-history-row" key={record.id}>
-              <div>
-                <strong>{record.issuedAt} {record.voidedAt ? ' · VOIDED' : ''}</strong>
-                <span>{record.items.map((item) => item.code + (internalName(item.code) ? ' — ' + internalName(item.code) : ' — needs verification') + (item.potency ? ' · ' + item.potency : '') + (item.dosageForm ? ' · ' + item.dosageForm : '')).join(', ')}</span>
-                {record.voidedAt ? <span>Void reason: {record.voidReason || 'Not specified'}</span> : null}
+          {registryError ? <p className="inline-error" role="alert">{registryError}</p>:null}
+          {historyError ? <div className="inline-error" role="alert">
+            Saved prescriptions could not be loaded: {historyError}. Check your account approval and patient assignment.
+          </div>:null}
+          {loadingHistory && !historyError ? <div className="empty-list" role="status">Loading saved prescriptions…</div>:null}
+          {!loadingHistory && !historyError && prescriptions.map(record => (
+            <article className="prescription-history-entry" key={record.id}>
+              <div className="prescription-history-row">
+                <div>
+                  <strong>{record.issuedAt} {record.voidedAt?' · VOIDED':''}</strong>
+                  <span>{record.items.map(item =>
+                    medicineDisplayLabel(item.code, medicineCodes) +
+                    (item.potency?' · '+item.potency:'') +
+                    (item.dosageForm?' · '+item.dosageForm:'')).join(', ') || 'No medicine items recorded'}</span>
+                </div>
+                <span className="quiet-note">By {record.issuedByName}</span>
+                <button className="button secondary" type="button"
+                  aria-expanded={viewingId===record.id}
+                  onClick={()=>setViewingId(current=>current===record.id?null:record.id)}>
+                  {viewingId===record.id?'Hide details':'View prescription'}
+                </button>
+                {!record.voidedAt ? <>
+                  <button className="button secondary" type="button"
+                    onClick={()=>printPrescription(record)}>Print</button>
+                  {(userId===record.createdBy||!canPrescribe) ?
+                    <button className="button danger-text" type="button"
+                      onClick={()=>handleVoid(record)}>Void</button>:null}
+                </>:<span className="quiet-note">Not valid for dispensing</span>}
               </div>
-              <span className="quiet-note">By {record.issuedByName}</span>
-              {record.voidedAt ? <span className="quiet-note">Not valid for dispensing</span> : <>
-                <button className="button secondary" type="button" onClick={() => printPrescription(record)}>Print</button>
-                {(userId === record.createdBy || !canPrescribe) ? <button className="button danger-text" type="button" onClick={() => handleVoid(record)}>Void</button> : null}
-              </>}
+              {viewingId===record.id?<SavedPrescriptionDetails record={record} medicines={medicineCodes}/>:null}
             </article>
           ))}
-          {!prescriptions.length ? <div className="empty-list">No prescriptions saved yet.</div> : null}
+          {!loadingHistory && !historyError && !prescriptions.length ?
+            <div className="empty-list">No saved prescriptions for this patient.</div>:null}
         </div>
       </section>
 
-      {printable ? (
-        <section className="prescription-print" aria-hidden="true">
-          <header>
-            <div>
-              <strong>{clinicName}</strong>
-              <span>Prescription</span>
-              {clinicAddress ? <small className="print-clinic-meta">{clinicAddress}</small> : null}
-              {clinicContact ? <small className="print-clinic-meta">{clinicContact}</small> : null}
-            </div>
-            <div className="print-rx">Rx</div>
-          </header>
-
-          <div className="print-patient-grid">
-            <div><span>Patient</span><strong>{patient.firstName} {patient.lastName}</strong></div>
-            <div><span>Date</span><strong>{printable.issuedAt}</strong></div>
-            <div><span>Reference</span><strong>RX-{printable.id.slice(0, 8).toUpperCase()}</strong></div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Medicine identification</th>
-                <th>Directions</th>
-                <th>Quantity / duration</th>
-              </tr>
-            </thead>
-            <tbody>
-              {printable.items.map((item, index) => (
-                <tr key={`${item.code}-${index}`}>
-                  <td><strong>{item.code}</strong><span className="rx-dispensary-detail">{internalName(item.code) || 'Medicine identity requires verification'}</span>{item.potency ? <span className="rx-dispensary-detail">{item.potency}</span> : null}{item.dosageForm ? <span className="rx-dispensary-detail">{item.dosageForm}</span> : null}</td>
-                  <td>{item.directions}</td>
-                  <td>{item.quantity || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {printable.patientInstructions ? (
-            <div className="print-instructions">
-              <span>Instructions</span>
-              <p>{printable.patientInstructions}</p>
-            </div>
-          ) : null}
-
-          <footer>
-            <div>
-              <span>Prescribed by</span>
-              <strong>{printable.issuedByName}</strong>
-            </div>
-            <p>Verify full medicine identity, preparation, strength and instructions before dispensing.</p>
-          </footer>
-        </section>
-      ) : null}
+      {printable ? <PrintablePrescription record={printable} patient={patient} /> : null}
     </>
   );
 }
