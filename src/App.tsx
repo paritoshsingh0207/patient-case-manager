@@ -16,6 +16,7 @@ import { CaseEditor } from './components/CaseEditor';
 import { AdminConsole } from './components/AdminConsole';
 import { MedicineCodeManager } from './components/MedicineCodeManager';
 import { PrescriptionPanel } from './components/PrescriptionPanel';
+import { FollowUpPanel } from './components/FollowUpPanel';
 import { hasWorkspaceAccess, matchesLoginRole, subscribePractitionerAccess, type LoginRole } from './services/accessService';
 import {
   createCase,
@@ -413,7 +414,7 @@ function PatientWorkspace({
   addCase,
   persistSuggestion,
 }: PatientWorkspaceProps) {
-  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'>('history');
+  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'|'followups'>('history');
   useEffect(()=>setPatientTab('history'),[selectedPatientId]);
   return (
     <div className="workspace-layout">
@@ -470,6 +471,9 @@ function PatientWorkspace({
               {isDoctor?<button type="button" className={patientTab==='consultation'?'selected':''}
                 aria-current={patientTab==='consultation'?'page':undefined}
                 onClick={()=>setPatientTab('consultation')}><ClinicIcon name="clipboard"/> New consultation</button>:null}
+              <button type="button" className={patientTab==='followups'?'selected':''}
+                aria-current={patientTab==='followups'?'page':undefined}
+                onClick={()=>setPatientTab('followups')}><ClinicIcon name="history"/> Follow-ups</button>
               <button type="button" className={patientTab==='prescriptions'?'selected':''}
                 aria-current={patientTab==='prescriptions'?'page':undefined}
                 onClick={()=>setPatientTab('prescriptions')}><ClinicIcon name="file"/> Prescriptions</button>
@@ -480,6 +484,8 @@ function PatientWorkspace({
               onSaveCase={addCase}
               onSaveSuggestion={persistSuggestion}
             />:null}
+            {patientTab==='followups'?<FollowUpPanel db={db} patientId={selectedPatient.id}
+              userId={userId} canManage={isDoctor}/>:null}
             {patientTab==='prescriptions'?<PrescriptionPanel
               db={db} patient={selectedPatient} userId={userId} practitionerName={practitionerName}
               canPrescribe={isDoctor}
