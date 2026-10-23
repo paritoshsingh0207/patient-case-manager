@@ -24,7 +24,8 @@ service firebase.storage {
       allow get: if canAccessPatient(patientId);
       allow list: if false;
       // Each original file is immutable. No client overwrite, delete or change.
-      allow create: if canAccessPatient(patientId)
+      allow create: if resource == null
+        && canAccessPatient(patientId)
         && fileId.matches('^[A-Za-z0-9_-]{15,100}$')
         && request.resource.size > 0
         && request.resource.size <= 10 * 1024 * 1024
