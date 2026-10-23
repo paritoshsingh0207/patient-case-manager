@@ -3060,6 +3060,42 @@ input,textarea,select{max-width:100%;min-width:0;}
   .patient-form input {
     scroll-margin-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
   }
-  .mobile-nav { pointer-events: none; }
-  .mobile-nav button { pointer-events: auto; }
+  /* Earlier mobile rules set top:69px for a sticky navigation strip.
+     When position becomes fixed with bottom:0 the inherited top would
+     stretch the navigation to almost full screen height (mobile screenshot
+     regression, Oct 23 2026). Reset the *entire* vertical geometry. */
+  .mobile-nav {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    height: calc(70px + env(safe-area-inset-bottom, 0px));
+    min-height: 0;
+    max-height: 94px;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: 2px;
+    padding: 5px 6px max(5px, env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
+    overflow-y: hidden;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+  .mobile-nav button {
+    flex: 1 1 0;
+    height: 100%;
+    max-height: 70px;
+    min-height: 0;
+    min-width: 0;
+    padding: 4px 2px;
+    box-sizing: border-box;
+    pointer-events: auto;
+  }
+  .mobile-nav button .nav-label {
+    font-size: clamp(8px, 2.6vw, 11px);
+    white-space: nowrap;
+  }
 }

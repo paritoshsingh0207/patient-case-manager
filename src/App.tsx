@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ClinicIcon, type ClinicIconName } from './components/ClinicIcon';
 import { onAuthStateChanged, reload, sendEmailVerification, signOut, type User } from 'firebase/auth';
 import type {
@@ -71,6 +71,7 @@ export default function App() {
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [search, setSearch] = useState('');
   const [dataError, setDataError] = useState('');
+  const workspaceScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!firebaseReady || !auth) {
@@ -248,11 +249,19 @@ export default function App() {
     {view:'medicines',label:'Medicine registry',icon:'book'},
     ...(isAdmin?[{view:'admin' as const,label:'Administration',icon:'shield' as const}]:[]),
   ];
+  function selectWorkspaceView(view: WorkspaceView) {
+    // The mobile workspace uses its own scrollport above the bottom tab bar.
+    // Reset it on view changes so a newly opened chart or section is visible,
+    // rather than inheriting the previous tab's deep scroll position.
+    workspaceScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    setActiveView(view);
+  }
   const navigation = navItems.map(item=>(
     <button key={item.view} type="button" title={item.label} aria-label={item.label}
       aria-current={activeView===item.view?'page':undefined}
       className={activeView===item.view?'active':''}
-      onClick={()=>setActiveView(item.view)}>
+      onClick={()=>selectWorkspaceView(item.view)}>
       <ClinicIcon name={item.icon}/>
       <span className="nav-label">{item.label}</span>
     </button>
@@ -270,7 +279,7 @@ export default function App() {
             onClick={()=>signOut(activeAuth)}><ClinicIcon name="logout"/></button>
         </div>
       </aside>
-      <div className="workspace-content">
+      <div className="workspace-content" ref={workspaceScrollRef}>
         <div className="workspace-utility">
           <div className="clinic-heading">
             <span className="clinic-identity">{import.meta.env.VITE_CLINIC_NAME?.trim() || 'Clinical Workspace'}</span>
