@@ -190,39 +190,7 @@ service cloud.firestore {
           && request.resource.data.reason.size() >= 3
           && request.resource.data.reason.size() <= 500
           && request.resource.data.dueDate is string
-          && request.resource.data.dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}
-      match /prescriptions/{prescriptionId} {
-        allow read: if canAccessPatient(patientId);
-        allow create: if validPrescription(patientId);
-        allow update: if canVoidPrescription(patientId);
-        allow delete: if false;
-      }
-    }
-    // Append-only client-admin activity. Privileged offline changes are not recorded here.
-    match /auditEvents/{eventId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin()
-        && request.resource.data.keys().hasOnly(['actorUid','action','targetType','targetId','recordedAt'])
-        && request.resource.data.keys().hasAll(['actorUid','action','targetType','targetId','recordedAt'])
-        && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['doctor_activated','doctor_deactivated','care_team_changed','doctor_patient_access_revoked']
-        && request.resource.data.targetType in ['doctor','patient']
-        && request.resource.data.targetId is string
-        && request.resource.data.targetId.size() > 0
-        && request.resource.data.targetId.size() <= 128
-        && request.resource.data.recordedAt == request.time;
-      allow update, delete: if false;
-    }
-    match /medicineCodes/{codeId} {
-      allow read: if isActiveMember();
-      // Import and archive via offline Admin SDK; never overwrite browser-side.
-      allow create, update, delete: if false;
-    }
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
-});
+          && request.resource.data.dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
         allow update: if isDoctor() && canAccessPatient(patientId)
           && resource.data.status == 'open'
           && request.resource.data.status == 'completed'
