@@ -28,3 +28,27 @@ test('unrelated Awakening collections, duplicate paths and weak passwords reject
  assert.throws(()=>f.encrypt(b,pass),/Duplicate/i);
  assert.throws(()=>f.encrypt(sample(),'short'),/16 characters/i);
 });
+
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),spawn=require('node:child_process').spawnSync;
+test('CLI verifies encrypted files and staging restore stays dry-run without credentials',()=>{
+ const folder=fs.mkdtempSync(path.join(os.tmpdir(),'pcm-recovery-test-'));
+ try{
+  const name=path.join(folder,'synthetic.pcmbackup');
+  fs.writeFileSync(name,f.encrypt(sample(),pass));
+  const run=(args)=>spawn(process.execPath,[path.join(__dirname,'clinic-backup.cjs'),...args],{
+   cwd:path.join(__dirname,'..','..'),
+   env:{...process.env,PCM_BACKUP_PASSPHRASE:pass},encoding:'utf8',timeout:12000,
+  });
+  let proc=run(['verify','--file='+name]);
+  assert.equal(proc.status,0,proc.stderr);
+  assert.match(proc.stdout,/ARCHIVE_VERIFIED/);
+  proc=run(['restore','--file='+name,'--project=source-project-123','--apply','--confirm-staging=source-project-123']);
+  assert.notEqual(proc.status,0);assert.match(proc.stderr,/different, isolated/i);
+  proc=run(['restore','--file='+name,'--project=some-production']);
+  assert.notEqual(proc.status,0);assert.match(proc.stderr,/staging project ID/i);
+  proc=run(['restore','--file='+name,'--project=clinic-isolated-staging']);
+  assert.equal(proc.status,0,proc.stderr);
+  assert.match(proc.stdout,/DRY RUN ONLY/);
+  assert.doesNotMatch(proc.stdout,/STAGING_RESTORE_CREATED/);
+ }finally{fs.rmSync(folder,{recursive:true,force:true})}
+});
