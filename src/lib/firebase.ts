@@ -1,7 +1,7 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
-import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
+import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -26,5 +26,13 @@ if (firebaseReady) {
   }
   auth = getAuth(app);
   db = getFirestore(app);
+  // Explicit opt-in for local smoke tests only. Never route a real Firebase
+  // project or a production build into the emulators.
+  if (import.meta.env.DEV &&
+      import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true' &&
+      firebaseConfig.projectId === 'demo-patient-case-manager') {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  }
 }
 export { app, appCheck, auth, db };
