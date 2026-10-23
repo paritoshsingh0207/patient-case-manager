@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import type { DoctorProfile, Patient } from '../types';
-import { registerDoctorProfile, setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
+import { registerDoctorProfile, registerAdminProfile, setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
 
 interface AdminConsoleProps {db:Firestore;patients:Patient[];adminUid:string;}
 export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   const [doctors,setDoctors]=useState<DoctorProfile[]>([]);
+  const [admins,setAdmins]=useState<{uid:string;displayName:string;email:string}[]>([]);
+  const [showAdmin,setShowAdmin]=useState(false);
+  const [adminDraft,setAdminDraft]=useState({uid:'',displayName:'',email:''});
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
   const [search,setSearch]=useState('');
@@ -20,6 +24,8 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   const [savingAccess,setSavingAccess]=useState(false);
 
   useEffect(()=>subscribeDoctors(db,setDoctors,err=>setError(err.message)),[db]);
+  useEffect(()=>onSnapshot(query(collection(db,'users'),where('role','==','admin')),snap=>
+    setAdmins(snap.docs.map(d=>({uid:d.id,displayName:String(d.data().displayName||'Administrator'),email:String(d.data().email||'')}))),err=>setError(err.message)),[db]);
   const visibleDoctors=useMemo(()=>doctors.filter(d=>{
     if(d.deleted)return false;
     const match=!search.trim()||[d.displayName,d.email,d.uid].join(' ').toLowerCase().includes(search.trim().toLowerCase());
@@ -45,6 +51,15 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
       setMessage('Doctor profile added. They can now sign in using their existing Firebase Authentication credentials.');
       setDraft({uid:'',displayName:'',email:''});setConfirmedAuthUid(false);setShowAdd(false);
     }catch(e){setError(e instanceof Error?e.message:'Could not add doctor profile. Check UID and existing records.');}
+    finally{setCreating(false);}
+  }
+  async function addAdmin(event:FormEvent) {
+    event.preventDefault();setCreating(true);setError('');setMessage('');
+    try {
+      if(!window.confirm('Grant full administrator access to this verified Authentication UID?'))return;
+      await registerAdminProfile(db,{...adminDraft,adminUid});
+      setMessage('Administrator added.');setAdminDraft({uid:'',displayName:'',email:''});setShowAdmin(false);
+    }catch(e){setError(e instanceof Error?e.message:'Could not create administrator.');}
     finally{setCreating(false);}
   }
   async function changeStatus(doctor:DoctorProfile) {
@@ -85,8 +100,8 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
         <div><strong>{inactiveDoctors.length}</strong><span>Inactive</span></div>
       </div>
       {showAdd?<form className="admin-add-doctor" onSubmit={addDoctor}>
-        <h3>Connect a doctor's login</h3>
-        <p className="section-copy">First create a separate Email/Password user in <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer">Firebase Console → Authentication → Users</a>. Copy the user's UID and verify it matches their email. This form links that existing account; it does not create a password.</p>
+        <h3>Existing doctor account</h3>
+        <p className="section-copy">New doctors should register from the login page. Their applications appear as inactive until you activate them below. You can also link a separate existing Firebase Authentication UID here.</p>
         <label>Firebase Authentication UID
           <input required minLength={6} maxLength={128} value={draft.uid}
             onChange={e=>setDraft({...draft,uid:e.target.value})} placeholder="Paste exact UID from Firebase Authentication"/>
@@ -132,6 +147,23 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
         </div>:null}
       </div>
       <p className="admin-safety-hint">Deactivation immediately denies clinical access. Reactivation restores access to patients still assigned to that doctor. No clinical history is deleted.</p>
+    </section>
+    <section className="workspace-card glass-panel admin-section">
+      <div className="section-heading"><div><h2>Administrators</h2></div>
+        <button type="button" className="button secondary" onClick={()=>setShowAdmin(x=>!x)}>Add administrator</button></div>
+      {showAdmin?<form className="admin-add-doctor" onSubmit={addAdmin}>
+        <p className="section-copy">Create and verify the separate account in Firebase Authentication first. Enter its exact UID and email.</p>
+        <label>Firebase Authentication UID<input required minLength={6} value={adminDraft.uid}
+          onChange={e=>setAdminDraft({...adminDraft,uid:e.target.value})}/></label>
+        <label>Name<input required minLength={2} value={adminDraft.displayName}
+          onChange={e=>setAdminDraft({...adminDraft,displayName:e.target.value})}/></label>
+        <label>Email<input required type="email" value={adminDraft.email}
+          onChange={e=>setAdminDraft({...adminDraft,email:e.target.value})}/></label>
+        <button className="button primary" disabled={creating} type="submit">Create administrator</button>
+      </form>:null}
+      <div className="doctor-list">{admins.map(a=><article className="doctor-row" key={a.uid}>
+        <div className="avatar">A</div><div><strong>{a.displayName}</strong><span>{a.email}</span></div>
+      </article>)}</div>
     </section>
     <section className="workspace-card glass-panel admin-section">
       <div className="section-heading"><div><p className="eyebrow">PATIENT PERMISSIONS</p>
