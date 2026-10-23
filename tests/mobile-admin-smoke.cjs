@@ -41,8 +41,53 @@ async function checkWidth(page, width) {
   }
 }
 
+/** Guard against the fullscreen navigation regression. Old CSS combined
+ * top:69px (sticky tab bar) with bottom:0 (fixed bottom bar), stretching the
+ * active navigation button across almost the entire phone screen. */
+async function assertMobileNavigationGeometry(page, width, requireTitle = false) {
+  const layout = await page.evaluate(() => {
+    const nav = document.querySelector('.mobile-nav');
+    const title = document.querySelector('.topbar h1');
+    const navBox = nav?.getBoundingClientRect();
+    const titleBox = title?.getBoundingClientRect();
+    const buttons = [...(nav?.querySelectorAll('button') ?? [])].map(button => {
+      const bounds = button.getBoundingClientRect();
+      return { top: bounds.top, height: bounds.height, bottom: bounds.bottom };
+    });
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      navTop: navBox?.top,
+      navHeight: navBox?.height,
+      navBottom: navBox?.bottom,
+      navPosition: nav ? getComputedStyle(nav).position : null,
+      titleTop: titleBox?.top,
+      titleBottom: titleBox?.bottom,
+      buttons,
+    };
+  });
+  const invalidNav = layout.navPosition !== 'fixed' ||
+    !Number.isFinite(layout.navTop) || !Number.isFinite(layout.navHeight) ||
+    layout.navHeight > 100 || layout.navHeight < 48 ||
+    Math.abs(layout.navBottom - layout.viewportHeight) > 5 ||
+    layout.navTop < layout.viewportHeight - 115 ||
+    layout.buttons.some(button => button.height > 85 || button.height < 30);
+  if (invalidNav) {
+    throw Error('Mobile navigation covers the workspace at ' + width + 'px: ' +
+      JSON.stringify(layout));
+  }
+  if (requireTitle && (!Number.isFinite(layout.titleTop) ||
+      layout.titleTop < 0 || layout.titleBottom >= layout.navTop)) {
+    throw Error('Workspace heading is not visible above mobile navigation at ' +
+      width + 'px: ' + JSON.stringify(layout));
+  }
+  console.log('PASS fixed mobile nav geometry at ' + width + 'px: bar ' +
+    Math.round(layout.navHeight) + 'px high');
+}
+
 async function verifyAdministratorAction(page, width) {
   await page.setViewportSize({ width, height: 800 });
+  await assertMobileNavigationGeometry(page, width);
   await page.getByRole('button', { name: 'Administration', exact: true }).click();
   await page.getByRole('heading', { name: 'Administrators', exact: true }).waitFor();
 
@@ -104,6 +149,14 @@ async function main() {
     .waitFor({ timeout: 25000 });
 
   for (const width of [320, 360, 390, 414, 768]) {
+    await page.setViewportSize({ width, height: 800 });
+    await assertMobileNavigationGeometry(page, width, true);
+    await checkWidth(page, width);
+    if (width === 390) {
+      const folder = path.resolve('mobile-ui-screenshots');
+      fs.mkdirSync(folder, { recursive: true });
+      await page.screenshot({ path: path.join(folder, 'overview-mobile-390.png') });
+    }
     await verifyAdministratorAction(page, width);
   }
   console.log('All mobile administrator smoke checks passed');
