@@ -17,6 +17,7 @@ import { AdminConsole } from './components/AdminConsole';
 import { MedicineCodeManager } from './components/MedicineCodeManager';
 import { PrescriptionPanel } from './components/PrescriptionPanel';
 import { FollowUpPanel } from './components/FollowUpPanel';
+import { patientInputFromRecord } from './lib/patientEdits';
 import { hasWorkspaceAccess, matchesLoginRole, subscribePractitionerAccess, type LoginRole } from './services/accessService';
 import {
   createCase,
@@ -24,6 +25,7 @@ import {
   saveSuggestion,
   subscribeCases,
   subscribePatients,
+  updatePatient,
 } from './services/patientService';
 
 type WorkspaceView = 'overview' | 'patients' | 'medicines' | 'admin';
@@ -64,6 +66,7 @@ export default function App() {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [showPatientForm, setShowPatientForm] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [search, setSearch] = useState('');
   const [dataError, setDataError] = useState('');
 
@@ -78,6 +81,8 @@ export default function App() {
       setDataError('');
       setAccessProfile(null);
       setAccessChecked(false);
+      setShowPatientForm(false);
+      setEditingPatient(null);
       setActiveView('overview');
       setAuthLoading(false);
     });
@@ -117,6 +122,7 @@ export default function App() {
     if (!user || !db || !authorized || !accessProfile) {
       setPatients([]);
       setSelectedPatientId(null);
+      setEditingPatient(null);
       return;
     }
 
@@ -211,6 +217,12 @@ export default function App() {
     setShowPatientForm(false);
   }
 
+  async function savePatientEdit(input: PatientInput) {
+    if (!editingPatient) return;
+    await updatePatient(activeDb, editingPatient.id, input, patientInputFromRecord(editingPatient));
+    setEditingPatient(null);
+  }
+
   async function addCase(input: CaseInput) {
     if (!selectedPatient || !isDoctor) return;
     await createCase(activeDb, selectedPatient.id, activeUser.uid, practitionerName, input);
@@ -299,6 +311,7 @@ export default function App() {
             setSearch={setSearch}
             setSelectedPatientId={setSelectedPatientId}
             onAddPatient={() => setShowPatientForm(true)}
+            onEditPatient={(patient) => setEditingPatient({ ...patient })}
             isDoctor={isDoctor}
             db={activeDb}
             userId={user.uid}
@@ -327,6 +340,10 @@ export default function App() {
 
       {showPatientForm ? (
         <PatientForm onSubmit={addPatient} onCancel={() => setShowPatientForm(false)} />
+      ) : null}
+      {editingPatient ? (
+        <PatientForm key={editingPatient.id} initialPatient={editingPatient}
+          onSubmit={savePatientEdit} onCancel={() => setEditingPatient(null)} />
       ) : null}
     </div>
   );
@@ -389,6 +406,7 @@ interface PatientWorkspaceProps {
   setSearch: (value: string) => void;
   setSelectedPatientId: (value: string) => void;
   onAddPatient: () => void;
+  onEditPatient: (patient: Patient) => void;
   isDoctor: boolean;
   db: NonNullable<typeof db>;
   userId: string;
@@ -407,6 +425,7 @@ function PatientWorkspace({
   setSearch,
   setSelectedPatientId,
   onAddPatient,
+  onEditPatient,
   isDoctor,
   db,
   userId,
@@ -454,7 +473,8 @@ function PatientWorkspace({
       <section className="detail-column">
         {selectedPatient ? (
           <>
-            <PatientHeader patient={selectedPatient} caseCount={cases.length} />
+            <PatientHeader patient={selectedPatient} caseCount={cases.length}
+              onEdit={() => onEditPatient(selectedPatient)} />
             <section className="patient-safety" aria-label="Patient safety information">
               <div className={selectedPatient.allergies?.trim()?'safety-item has-alert':'safety-item'}>
                 <div className="safety-heading"><ClinicIcon name="alert"/><span>Known allergies</span></div>
@@ -509,7 +529,7 @@ function PatientWorkspace({
   );
 }
 
-function PatientHeader({ patient, caseCount }: { patient: Patient; caseCount: number }) {
+function PatientHeader({ patient, caseCount, onEdit }: { patient: Patient; caseCount: number; onEdit: () => void }) {
   return (
     <section className="patient-header workspace-card glass-panel">
       <div className="avatar large">{initials(patient.firstName, patient.lastName)}</div>
@@ -517,6 +537,7 @@ function PatientHeader({ patient, caseCount }: { patient: Patient; caseCount: nu
         <p className="eyebrow">PATIENT PROFILE</p>
         <h2>{patient.firstName} {patient.lastName}</h2>
         <span>{patient.email || patient.phone || 'No contact details'}</span>
+        <button type="button" className="button secondary patient-edit-action" onClick={onEdit}>Edit profile</button>
       </div>
       <div className="patient-metrics">
         <div><strong>{ageFromDate(patient.dateOfBirth)}</strong><span>Age</span></div>
