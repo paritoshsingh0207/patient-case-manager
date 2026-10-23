@@ -22,7 +22,7 @@ or Cloud Storage. The functions/ directory holds trusted offline admin scripts.
 - Authorized clinicians can edit patient demographics, medical history, allergies and medicine lists; concurrent edits to the same field are blocked to prevent unnoticed overwrites, and assignments remain admin-controlled.
 - Patient creation warns about **possible duplicates** using pairs of matching identity details. Doctors see only assigned charts; administrators can review potential duplicates clinic-wide. Creating another record despite a warning requires explicit acknowledgement; charts are never merged automatically.
 - Append-only recent admin activity for doctor status and patient access changes; this does not replace server-side comprehensive audit logging.
-- No file attachments / Cloud Storage feature, automated backups, or backup restoration tooling.
+- Patient-scoped lab reports and attachments (PDF/JPEG/PNG up to 10 MB) use optional private Firebase Storage with enforced care-team access; this requires Blaze, not Spark. Automated backups of files and clinic-wide file virus scanning are not implemented.
 
 ## Setup
 
@@ -161,3 +161,48 @@ private patient details through this feature. Administrators can inspect
 clinic-wide duplicate pairs under Administration. Staff must confirm identity
 before reusing any chart. There is no automatic merge, deletion or reassignment
 of past medical history or prescriptions. Preserve existing chart identifiers.
+
+## Patient lab reports and attachments (Blaze-plan optional module)
+
+The Patient Chart contains a **Lab reports & files** tab for PDF, JPG and PNG
+attachments (maximum 10 MiB). Authorized doctors and administrators may upload
+files into the current patient's private chart; the file appears only after
+the upload completes. Authorized users can download it with an authenticated
+Storage SDK request (not a reusable public download token or Hosting link).
+Original binary objects and audit-relevant Firestore attachment metadata are
+immutable from the browser. Unfinished records remain visible as pending/failed
+for administrator troubleshooting; they are **not** confirmed lab reports.
+
+**You must opt in to a Firebase Blaze billing plan.** As of February 2026,
+Firebase Cloud Storage access is no longer available on Spark. The application
+keeps uploads disabled when `VITE_FIREBASE_STORAGE_BUCKET` is unset; there is
+no secret workaround storing health documents in public Hosting or Firestore.
+To enable safely after an authorized staging test:
+
+1. Confirm the target Firebase project, a separate staging project and budget
+   alarms, acceptable data region, retention policy and privacy agreement.
+2. Upgrade the intended Firebase project to Blaze through Firebase Console.
+   Create a **private** Firebase Storage bucket using Firebase Console.
+   Note its actual bucket name (typically PROJECT_ID.firebasestorage.app).
+3. Deploy and review `storage.rules` to this bucket from a trusted machine:
+   `npx firebase-tools deploy --project PROJECT_ID --only storage`.
+   Storage rules use the caller's Firestore user and patient chart to enforce
+   approval, patient assignment, email verification for new doctors and
+   immediate access revocation. Firebase may prompt you to authorize the
+   Cloud Storage rules-to-Firestore service account. Do not make the bucket
+   public. Ensure the storage rules are active **before** setting the env var.
+4. Set `VITE_FIREBASE_STORAGE_BUCKET=ACTUAL_BUCKET_NAME` in the build
+   environment, and deploy Hosting + Firestore rules only after validating
+   authenticated upload/download and revocation on staging.
+5. Run `npm run test:storage` and `npm run test:all` locally. Test on mobile,
+   including upload failures and broken connections. Allow bucket CORS for the
+   authorized app origins if required for authenticated browser blob downloads.
+6. Arrange independent protected backups of **both Firestore metadata and
+   Cloud Storage objects**; `clinic-backup.cjs` backs up Firestore only.
+
+**Security/clinical limitation:** browsers check file signatures but this is
+not antivirus scanning, PDF sanitization or laboratory-result validation.
+Never rely on uploaded results without clinician verification. No public
+URLs, browser delete, OCR, clinical interpretation, background malware scanning,
+automatic file retention management, or automatic Storage backups are provided.
+Deploy on patient-identifiable data only after clinical/security sign-off.
