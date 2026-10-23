@@ -11,3 +11,11 @@ ui-debug.log
 coverage/
 functions/node_modules/
 functions/lib/
+
+# Recovery files and clinical data must never enter Git
+*.pcmbackup
+*.backup.json
+*.backup.ndjson
+*.backup.gz
+backups/
+restore-work/

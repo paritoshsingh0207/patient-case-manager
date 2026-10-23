@@ -104,3 +104,34 @@ recovery checklist in SPARK_RELEASE.md. Firestore data is not automatically back
 up by this app. Do not treat the in-app activity list as a complete log of reads or
 privileged changes. Test patient access removal and verify restore in a separate
 Firebase project before relying on a backup.
+
+## Clinic-only encrypted backup and staging restore
+
+A local, manual backup script uses the existing Firebase CLI login. It requires
+sufficient Firestore IAM permissions. It uses no service-account key, gcloud or
+Cloud Functions. From a trusted administrator workstation after npm install:
+
+    node functions/scripts/clinic-backup.cjs export --project=awakening-casemanager --confirm-project=awakening-casemanager --out="C:\private-clinic-backups\2026-10-23.pcmbackup"
+    node functions/scripts/clinic-backup.cjs verify --file="C:\private-clinic-backups\2026-10-23.pcmbackup"
+    node functions/scripts/clinic-backup.cjs restore --file="C:\private-clinic-backups\2026-10-23.pcmbackup" --project=your-isolated-staging
+
+The last command is a DRY RUN. Restoring into an EMPTY isolated staging project
+requires adding --apply --confirm-staging=your-isolated-staging. Production
+restore, overwrites and non-staging targets are intentionally refused.
+A partially failed restore requires a fresh empty staging project.
+
+The file uses AES-256-GCM, scrypt and an integrity digest, and is re-verified
+after creation. A unique strong passphrase of at least 16 characters is
+prompted without terminal echo, not supplied as a command-line argument.
+Keep the backup outside the Git working tree and the passphrase separately
+in a secure password vault. Never send plaintext patient records to GitHub.
+
+Only case-manager roots (users, patients, medicineCodes, auditEvents) and all
+patient subcollections are exported. Other Awakening top-level collections are
+excluded. Firebase Auth accounts/passwords, Hosting, Cloud Storage, indexes
+and Firestore rules are NOT backed up. This is a bounded in-memory backup,
+not a server-atomic snapshot, automated backup or comprehensive audit log.
+It uses a Firebase CLI internal authentication helper that may change versions;
+if unavailable, it fails closed.
+
+Read STAGING_RECOVERY.md before trusting the archive for disaster recovery.
