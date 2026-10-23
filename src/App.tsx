@@ -219,9 +219,9 @@ export default function App() {
     activeUser.email?.split('@')[0] ||
     (isAdmin ? 'Administrator' : 'Doctor');
 
-  async function addPatient(input: PatientInput, confirmedPotentialDuplicate = false) {
+  async function addPatient(input: PatientInput, reviewedMatchIds: string[] = []) {
     if (!patientDirectoryReady) throw Error('The patient directory must load before creating a record.');
-    const result = await createPatient(activeDb, activeUser.uid, activeProfile.role, input, confirmedPotentialDuplicate);
+    const result = await createPatient(activeDb, activeUser.uid, activeProfile.role, input, reviewedMatchIds);
     setSelectedPatientId(result.id);
     setShowPatientForm(false);
   }
