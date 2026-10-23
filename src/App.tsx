@@ -16,6 +16,7 @@ import { CaseEditor } from './components/CaseEditor';
 import { AdminConsole } from './components/AdminConsole';
 import { MedicineCodeManager } from './components/MedicineCodeManager';
 import { PrescriptionPanel } from './components/PrescriptionPanel';
+import { FollowUpPanel } from './components/FollowUpPanel';
 import { hasWorkspaceAccess, matchesLoginRole, subscribePractitionerAccess, type LoginRole } from './services/accessService';
 import {
   createCase,
@@ -413,7 +414,7 @@ function PatientWorkspace({
   addCase,
   persistSuggestion,
 }: PatientWorkspaceProps) {
-  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'>('history');
+  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'|'followups'>('history');
   useEffect(()=>setPatientTab('history'),[selectedPatientId]);
   return (
     <div className="workspace-layout">
@@ -470,18 +471,25 @@ function PatientWorkspace({
               {isDoctor?<button type="button" className={patientTab==='consultation'?'selected':''}
                 aria-current={patientTab==='consultation'?'page':undefined}
                 onClick={()=>setPatientTab('consultation')}><ClinicIcon name="clipboard"/> New consultation</button>:null}
+              <button type="button" className={patientTab==='followups'?'selected':''}
+                aria-current={patientTab==='followups'?'page':undefined}
+                onClick={()=>setPatientTab('followups')}><ClinicIcon name="history"/> Follow-ups</button>
               <button type="button" className={patientTab==='prescriptions'?'selected':''}
                 aria-current={patientTab==='prescriptions'?'page':undefined}
                 onClick={()=>setPatientTab('prescriptions')}><ClinicIcon name="file"/> Prescriptions</button>
             </nav>
             {patientTab==='history'?<CaseTimeline cases={cases}/>:null}
             {patientTab==='consultation'&&isDoctor?<CaseEditor
+              key={selectedPatient.id}
               patientName={selectedPatient.firstName+' '+selectedPatient.lastName}
+              previousCases={cases}
               onSaveCase={addCase}
               onSaveSuggestion={persistSuggestion}
             />:null}
+            {patientTab==='followups'?<FollowUpPanel key={selectedPatient.id} db={db} patientId={selectedPatient.id}
+              userId={userId} canManage={isDoctor}/>:null}
             {patientTab==='prescriptions'?<PrescriptionPanel
-              db={db} patient={selectedPatient} userId={userId} practitionerName={practitionerName}
+              key={selectedPatient.id} db={db} patient={selectedPatient} userId={userId} practitionerName={practitionerName}
               canPrescribe={isDoctor}
             />:null}
           </>
@@ -548,6 +556,14 @@ function CaseTimeline({ cases }: { cases: CaseRecord[] }) {
               {record.concomitants ? <p><b>Concomitants:</b> {record.concomitants}</p> : null}
               {record.mentalGenerals ? <p><b>Mental generals:</b> {record.mentalGenerals}</p> : null}
               {record.physicalGenerals ? <p><b>Physical generals:</b> {record.physicalGenerals}</p> : null}
+              {record.visitType ? <p><b>Type:</b> {record.visitType==='follow-up'?'Follow-up':'Initial assessment'}</p> : null}
+              {record.weightKg ? <p><b>Weight:</b> {record.weightKg} kg</p> : null}
+              {record.temperatureC ? <p><b>Temperature:</b> {record.temperatureC} °C</p> : null}
+              {record.pulseBpm ? <p><b>Pulse:</b> {record.pulseBpm} bpm</p> : null}
+              {record.systolicBp&&record.diastolicBp ? <p><b>Blood pressure:</b> {record.systolicBp}/{record.diastolicBp} mmHg</p> : null}
+              {record.assessment ? <p><b>Assessment:</b> {record.assessment}</p> : null}
+              {record.carePlan ? <p><b>Care plan:</b> {record.carePlan}</p> : null}
+              {record.followUpAdvice ? <p><b>Follow-up advice:</b> {record.followUpAdvice}</p> : null}
               {record.notes ? <p><b>Notes:</b> {record.notes}</p> : null}
             </div>
           </details>

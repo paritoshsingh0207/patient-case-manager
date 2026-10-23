@@ -15,6 +15,7 @@ import {
   deleteDoc,
   setDoc,
   updateDoc,
+  writeBatch,
   serverTimestamp,
   query,
   where,
@@ -530,4 +531,55 @@ describe('saved prescription history access after sign-in',()=>{
     await assertFails(getDocs(collection(sameDoctor,'patients/patient-a/prescriptions')));
     await assertSucceeds(getDocs(collection(secondDoctor,'patients/patient-a/prescriptions')));
   });
+});
+
+describe('Priority 0: protected administrative activity',()=>{
+ it('allows admin to append records, not edit them, and rejects doctors and spoofing',async()=>{
+  await seedUser('admin','admin');await seedUser('doctor','doctor');
+  const a=testEnv.authenticatedContext('admin').firestore(),d=testEnv.authenticatedContext('doctor').firestore();
+  const event={actorUid:'admin',action:'care_team_changed',targetType:'patient',targetId:'patient-a',recordedAt:serverTimestamp()};
+  await assertSucceeds(setDoc(doc(a,'auditEvents/event1'),event));
+  await assertSucceeds(getDoc(doc(a,'auditEvents/event1')));
+  await assertFails(getDoc(doc(d,'auditEvents/event1')));
+  await assertFails(setDoc(doc(d,'auditEvents/event2'),{...event,actorUid:'doctor'}));
+  await assertFails(setDoc(doc(a,'auditEvents/event3'),{...event,actorUid:'someone'}));
+  await assertFails(updateDoc(doc(a,'auditEvents/event1'),{targetId:'patient-b'}));
+  await assertFails(deleteDoc(doc(a,'auditEvents/event1')));
+ });
+});
+
+describe('Priority 1: internal follow-up permissions',()=>{
+ it('assigned doctor can create and complete follow-up; unassigned doctor cannot read or alter',async()=>{
+  await seedUser('admin','admin');await seedUser('d1','doctor');await seedUser('d2','doctor');
+  await seedPatient('pa',['d1']);
+  const first=testEnv.authenticatedContext('d1').firestore(),other=testEnv.authenticatedContext('d2').firestore(),
+   admin=testEnv.authenticatedContext('admin').firestore();
+  const ref=doc(first,'patients/pa/followUps/fu1');
+  const data={patientId:'pa',createdBy:'d1',dueDate:'2026-11-10',reason:'Review symptom progression',status:'open',createdAt:serverTimestamp()};
+  await assertSucceeds(setDoc(ref,data));
+  await assertSucceeds(getDoc(doc(admin,'patients/pa/followUps/fu1')));
+  await assertFails(getDoc(doc(other,'patients/pa/followUps/fu1')));
+  await assertFails(setDoc(doc(other,'patients/pa/followUps/forged'),{...data,createdBy:'d2'}));
+  await assertSucceeds(updateDoc(ref,{status:'completed',completedAt:serverTimestamp(),completedBy:'d1'}));
+  await assertFails(updateDoc(ref,{status:'open'}));
+  await assertFails(deleteDoc(ref));
+ });
+});
+
+describe('Priority 0: administrator invitation audit remains append-only',()=>{
+ it('supports an atomically recorded administrator invitation',async()=>{
+  await seedUser('admin','admin');
+  const a=testEnv.authenticatedContext('admin').firestore();
+  const b=writeBatch(a);
+  b.set(doc(a,'users/second-admin'),{
+    role:'admin',active:true,displayName:'Another Administrator',email:'second@example.com',
+    createdBy:'admin',createdAt:serverTimestamp(),updatedAt:serverTimestamp(),statusUpdatedBy:'admin',
+  });
+  b.set(doc(a,'auditEvents/new-admin-event'),{
+    actorUid:'admin',action:'administrator_invited',targetType:'administrator',targetId:'second-admin',
+    recordedAt:serverTimestamp(),
+  });
+  await assertSucceeds(b.commit());
+  await assertSucceeds(getDoc(doc(a,'auditEvents/new-admin-event')));
+ });
 });

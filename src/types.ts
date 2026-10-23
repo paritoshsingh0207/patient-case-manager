@@ -71,6 +71,15 @@ export interface CaseRecord {
   mentalGenerals?: string;
   physicalGenerals?: string;
   notes?: string;
+  visitType?: 'initial'|'follow-up';
+  assessment?: string;
+  carePlan?: string;
+  followUpAdvice?: string;
+  weightKg?: string;
+  temperatureC?: string;
+  pulseBpm?: string;
+  systolicBp?: string;
+  diastolicBp?: string;
   status: 'draft' | 'completed';
   createdAt?: Date;
   updatedAt?: Date;
