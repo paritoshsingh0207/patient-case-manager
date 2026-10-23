@@ -1,9 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import type { CaseInput, SuggestionResult } from '../types';
+import type { CaseInput, CaseRecord, SuggestionResult } from '../types';
 import { suggestRemedies } from '../lib/remedyEngine';
 
 interface CaseEditorProps {
   patientName: string;
+  previousCases: CaseRecord[];
   onSaveCase: (input: CaseInput) => Promise<void>;
   onSaveSuggestion: (input: CaseInput, result: SuggestionResult) => Promise<void>;
 }
@@ -20,10 +21,12 @@ const initialCase = (): CaseInput => ({
   mentalGenerals: '',
   physicalGenerals: '',
   notes: '',
+  visitType:'initial',assessment:'',carePlan:'',followUpAdvice:'',
+  weightKg:'',temperatureC:'',pulseBpm:'',systolicBp:'',diastolicBp:'',
   status: 'draft',
 });
 
-export function CaseEditor({ patientName, onSaveCase, onSaveSuggestion }: CaseEditorProps) {
+export function CaseEditor({ patientName, previousCases, onSaveCase, onSaveSuggestion }: CaseEditorProps) {
   const [form, setForm] = useState<CaseInput>(initialCase);
   const [result, setResult] = useState<SuggestionResult | null>(null);
   const [saving, setSaving] = useState(false);
@@ -37,6 +40,19 @@ export function CaseEditor({ patientName, onSaveCase, onSaveSuggestion }: CaseEd
     setMessage('');
   }
 
+  function reusePreviousContext() {
+    const prior=previousCases[0];
+    if(!prior)return;
+    if(!window.confirm('Copy observations from the previous consultation into a NEW draft? Review every field before saving. The signed record will not change.'))return;
+    setForm(current=>({...current,visitType:'follow-up',
+      chiefComplaint:prior.chiefComplaint,
+      location:prior.location??'',sensation:prior.sensation??'',
+      modalitiesBetter:prior.modalitiesBetter??'',modalitiesWorse:prior.modalitiesWorse??'',
+      concomitants:prior.concomitants??'',mentalGenerals:prior.mentalGenerals??'',
+      physicalGenerals:prior.physicalGenerals??'',
+    }));
+    setResult(null);
+  }
   function analyze() {
     const suggestionResult = suggestRemedies(form);
     setResult(suggestionResult);
@@ -72,7 +88,33 @@ export function CaseEditor({ patientName, onSaveCase, onSaveSuggestion }: CaseEd
         <span className="status-pill">Practitioner review</span>
       </div>
 
+      {previousCases.length ? <div className="case-comparison">
+        <h3>Previous consultations</h3>
+        <div className="case-compare-grid">
+          {previousCases.slice(0,2).map(prior=><article key={prior.id} className="case-compare-card">
+            <strong>{prior.consultationDate} · {prior.visitType==='follow-up'?'Follow-up':'Consultation'}</strong>
+            <p><b>Complaint:</b> {prior.chiefComplaint}</p>
+            {prior.assessment?<p><b>Assessment:</b> {prior.assessment}</p>:null}
+            {prior.carePlan?<p><b>Plan:</b> {prior.carePlan}</p>:null}
+            {(prior.weightKg||prior.temperatureC||prior.pulseBpm||prior.systolicBp)?<p>
+              <b>Vitals:</b> {[
+                prior.weightKg?`${prior.weightKg} kg`:null,
+                prior.temperatureC?`${prior.temperatureC} °C`:null,
+                prior.pulseBpm?`${prior.pulseBpm} bpm`:null,
+                prior.systolicBp&&prior.diastolicBp?`${prior.systolicBp}/${prior.diastolicBp} mmHg`:null,
+              ].filter(Boolean).join(' · ')}</p>:null}
+          </article>)}
+        </div>
+        <button type="button" className="button secondary" onClick={reusePreviousContext}>Use previous observations as a new draft</button>
+      </div>:null}
       <form onSubmit={save}>
+        <div className="form-grid two">
+          <label>Consultation type
+            <select value={form.visitType||'initial'} onChange={e=>update('visitType',e.target.value as 'initial'|'follow-up')}>
+              <option value="initial">Initial assessment</option><option value="follow-up">Follow-up review</option>
+            </select>
+          </label>
+        </div>
         <div className="form-grid two">
           <label>Consultation date<input type="date" value={form.consultationDate} onChange={(e) => update('consultationDate', e.target.value)} /></label>
           <label>Duration<input placeholder="e.g. 3 days, recurrent 6 months" value={form.duration} onChange={(e) => update('duration', e.target.value)} /></label>
@@ -90,6 +132,28 @@ export function CaseEditor({ patientName, onSaveCase, onSaveSuggestion }: CaseEd
         </div>
 
         <label>Physical generals<textarea placeholder="Thermal preference, thirst, sleep, appetite, energy…" value={form.physicalGenerals} onChange={(e) => update('physicalGenerals', e.target.value)} /></label>
+        <div className="case-structured-panel">
+          <h3>Clinical observations</h3>
+          <div className="case-vitals-grid">
+            <label>Weight (kg)<input type="number" min="0" max="400" step="0.1"
+              value={form.weightKg||''} onChange={e=>update('weightKg',e.target.value)}/></label>
+            <label>Temperature (°C)<input type="number" min="25" max="45" step="0.1"
+              value={form.temperatureC||''} onChange={e=>update('temperatureC',e.target.value)}/></label>
+            <label>Pulse (beats/min)<input type="number" min="20" max="250"
+              value={form.pulseBpm||''} onChange={e=>update('pulseBpm',e.target.value)}/></label>
+            <label>Systolic BP (mmHg)<input type="number" min="40" max="300"
+              value={form.systolicBp||''} onChange={e=>update('systolicBp',e.target.value)}/></label>
+            <label>Diastolic BP (mmHg)<input type="number" min="20" max="200"
+              value={form.diastolicBp||''} onChange={e=>update('diastolicBp',e.target.value)}/></label>
+          </div>
+          <p className="quiet-note">Record measurements taken clinically; no values or diagnoses are inferred.</p>
+          <label>Clinical assessment<textarea value={form.assessment||''}
+            onChange={e=>update('assessment',e.target.value)} placeholder="Findings, assessment, differential considerations"/></label>
+          <label>Care plan<textarea value={form.carePlan||''}
+            onChange={e=>update('carePlan',e.target.value)} placeholder="Investigations, referrals and clinically reviewed management plan"/></label>
+          <label>Follow-up advice<textarea value={form.followUpAdvice||''}
+            onChange={e=>update('followUpAdvice',e.target.value)} placeholder="Planned reassessment and warning signs"/></label>
+        </div>
         <label>Practitioner notes<textarea placeholder="Observations, investigations, context, differentials." value={form.notes} onChange={(e) => update('notes', e.target.value)} /></label>
 
         <div className="clinical-warning">

@@ -481,6 +481,7 @@ function PatientWorkspace({
             {patientTab==='history'?<CaseTimeline cases={cases}/>:null}
             {patientTab==='consultation'&&isDoctor?<CaseEditor
               patientName={selectedPatient.firstName+' '+selectedPatient.lastName}
+              previousCases={cases}
               onSaveCase={addCase}
               onSaveSuggestion={persistSuggestion}
             />:null}
@@ -554,6 +555,14 @@ function CaseTimeline({ cases }: { cases: CaseRecord[] }) {
               {record.concomitants ? <p><b>Concomitants:</b> {record.concomitants}</p> : null}
               {record.mentalGenerals ? <p><b>Mental generals:</b> {record.mentalGenerals}</p> : null}
               {record.physicalGenerals ? <p><b>Physical generals:</b> {record.physicalGenerals}</p> : null}
+              {record.visitType ? <p><b>Type:</b> {record.visitType==='follow-up'?'Follow-up':'Initial assessment'}</p> : null}
+              {record.weightKg ? <p><b>Weight:</b> {record.weightKg} kg</p> : null}
+              {record.temperatureC ? <p><b>Temperature:</b> {record.temperatureC} °C</p> : null}
+              {record.pulseBpm ? <p><b>Pulse:</b> {record.pulseBpm} bpm</p> : null}
+              {record.systolicBp&&record.diastolicBp ? <p><b>Blood pressure:</b> {record.systolicBp}/{record.diastolicBp} mmHg</p> : null}
+              {record.assessment ? <p><b>Assessment:</b> {record.assessment}</p> : null}
+              {record.carePlan ? <p><b>Care plan:</b> {record.carePlan}</p> : null}
+              {record.followUpAdvice ? <p><b>Follow-up advice:</b> {record.followUpAdvice}</p> : null}
               {record.notes ? <p><b>Notes:</b> {record.notes}</p> : null}
             </div>
           </details>

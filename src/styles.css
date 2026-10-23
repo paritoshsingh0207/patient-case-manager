@@ -2996,3 +2996,16 @@ input,textarea,select{max-width:100%;min-width:0;}
 .followup-row p{font-size:12px;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .followup-row small{color:var(--muted);font-size:11px}
 @media(max-width:600px){.followup-row{flex-wrap:wrap}.followup-row .button{width:100%}}
+
+/* Structured consultation and compare-only signed history */
+.case-comparison,.case-structured-panel{display:grid;gap:14px;padding:14px;border:1px solid var(--line);border-radius:10px;margin-bottom:18px}
+.case-comparison h3,.case-structured-panel h3{font-size:17px;margin:0}
+.case-compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.case-compare-card{padding:12px;border:1px solid var(--line);border-radius:8px;min-width:0}
+.case-compare-card strong{font-size:12px}
+.case-compare-card p{font-size:11px;overflow-wrap:anywhere;white-space:pre-wrap}
+.case-comparison>.button{justify-self:start}
+.case-vitals-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.case-vitals-grid>label{min-width:0}
+@media(max-width:750px){.case-vitals-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.case-compare-grid{grid-template-columns:1fr}}
+@media(max-width:420px){.case-vitals-grid{grid-template-columns:1fr}}
