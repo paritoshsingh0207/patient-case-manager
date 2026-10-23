@@ -11,6 +11,7 @@ function doctorFromDoc(snapshot: QueryDocumentSnapshot<DocumentData>): DoctorPro
     displayName:typeof data.displayName==='string'?data.displayName:'Unnamed doctor',
     email:typeof data.email==='string'?data.email:'',
     deleted:data.deleted===true,
+    pending:data.active!==true && !data.statusUpdatedBy,
   };
 }
 export function subscribeDoctors(db:Firestore,onChange:(doctors:DoctorProfile[])=>void,onError:(error:Error)=>void) {

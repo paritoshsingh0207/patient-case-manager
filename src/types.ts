@@ -16,6 +16,7 @@ export interface DoctorProfile {
   displayName: string;
   email: string;
   deleted?: boolean;
+  pending?: boolean;
 }
 
 export interface Patient {

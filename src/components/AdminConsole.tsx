@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import type { DoctorProfile, Patient } from '../types';
-import { registerDoctorProfile, registerAdminProfile, setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
+import { registerDoctorProfile, setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
+import { inviteAdministrator } from '../services/provisioningService';
 
 interface AdminConsoleProps {db:Firestore;patients:Patient[];adminUid:string;}
 export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   const [doctors,setDoctors]=useState<DoctorProfile[]>([]);
   const [admins,setAdmins]=useState<{uid:string;displayName:string;email:string}[]>([]);
   const [showAdmin,setShowAdmin]=useState(false);
-  const [adminDraft,setAdminDraft]=useState({uid:'',displayName:'',email:''});
+  const [adminDraft,setAdminDraft]=useState({displayName:'',email:''});
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
   const [search,setSearch]=useState('');
@@ -34,6 +35,7 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   const availableDoctors=useMemo(()=>doctors.filter(d=>!d.deleted),[doctors]);
   const activeDoctors=availableDoctors.filter(d=>d.active);
   const inactiveDoctors=availableDoctors.filter(d=>!d.active);
+  const pendingDoctors=inactiveDoctors.filter(d=>d.pending);
   const selectedPatient=patients.find(x=>x.id===selectedPatientId)??null;
   const assignedCounts=useMemo(()=>new Map(doctors.map(d=>[
     d.uid,patients.filter(p=>p.doctorIds.includes(d.uid)).length,
@@ -56,9 +58,10 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   async function addAdmin(event:FormEvent) {
     event.preventDefault();setCreating(true);setError('');setMessage('');
     try {
-      if(!window.confirm('Grant full administrator access to this verified Authentication UID?'))return;
-      await registerAdminProfile(db,{...adminDraft,adminUid});
-      setMessage('Administrator added.');setAdminDraft({uid:'',displayName:'',email:''});setShowAdmin(false);
+      if(!window.confirm('Invite this person as an administrator with full clinic access?'))return;
+      await inviteAdministrator(db,{name:adminDraft.displayName,email:adminDraft.email,adminUid});
+      setMessage('Administrator invited. Password setup email sent.');
+      setAdminDraft({displayName:'',email:''});setShowAdmin(false);
     }catch(e){setError(e instanceof Error?e.message:'Could not create administrator.');}
     finally{setCreating(false);}
   }
@@ -97,7 +100,7 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
       <div className="admin-doctor-summary">
         <div><strong>{availableDoctors.length}</strong><span>Total doctors</span></div>
         <div><strong>{activeDoctors.length}</strong><span>Active</span></div>
-        <div><strong>{inactiveDoctors.length}</strong><span>Inactive</span></div>
+        <div><strong>{pendingDoctors.length}</strong><span>Pending approval</span></div>
       </div>
       {showAdd?<form className="admin-add-doctor" onSubmit={addDoctor}>
         <h3>Existing doctor account</h3>
@@ -136,10 +139,10 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
           <div className="avatar">{doctor.displayName.slice(0,2).toUpperCase()}</div>
           <div className="admin-doctor-identity"><strong>{doctor.displayName}</strong>
             <span>{doctor.email}</span><small>{assignedCounts.get(doctor.uid)??0} assigned patient(s)</small></div>
-          <span className={'doctor-status '+(doctor.active?'':'inactive')}>{doctor.active?'Active':'Inactive'}</span>
+          <span className={'doctor-status '+(doctor.active?'':'inactive')}>{doctor.active?'Active':doctor.pending?'Pending':'Inactive'}</span>
           <button type="button" className={'button secondary admin-status-button '+(doctor.active?'danger-text':'')}
             onClick={()=>changeStatus(doctor)} disabled={busyUid===doctor.uid}>
-            {busyUid===doctor.uid?'Updating…':doctor.active?'Deactivate':'Reactivate'}
+            {busyUid===doctor.uid?'Updating…':doctor.active?'Deactivate':doctor.pending?'Approve':'Reactivate'}
           </button>
         </article>)}
         {!visibleDoctors.length?<div className="empty-list">
@@ -152,14 +155,12 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
       <div className="section-heading"><div><h2>Administrators</h2></div>
         <button type="button" className="button secondary" onClick={()=>setShowAdmin(x=>!x)}>Add administrator</button></div>
       {showAdmin?<form className="admin-add-doctor" onSubmit={addAdmin}>
-        <p className="section-copy">Create and verify the separate account in Firebase Authentication first. Enter its exact UID and email.</p>
-        <label>Firebase Authentication UID<input required minLength={6} value={adminDraft.uid}
-          onChange={e=>setAdminDraft({...adminDraft,uid:e.target.value})}/></label>
+        <p className="section-copy">An individual login will be created and a password setup email sent. Invite trusted clinic staff only.</p>
         <label>Name<input required minLength={2} value={adminDraft.displayName}
           onChange={e=>setAdminDraft({...adminDraft,displayName:e.target.value})}/></label>
         <label>Email<input required type="email" value={adminDraft.email}
           onChange={e=>setAdminDraft({...adminDraft,email:e.target.value})}/></label>
-        <button className="button primary" disabled={creating} type="submit">Create administrator</button>
+        <button className="button primary" disabled={creating} type="submit">{creating?'Sending…':'Invite administrator'}</button>
       </form>:null}
       <div className="doctor-list">{admins.map(a=><article className="doctor-row" key={a.uid}>
         <div className="avatar">A</div><div><strong>{a.displayName}</strong><span>{a.email}</span></div>
