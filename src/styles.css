@@ -3032,3 +3032,34 @@ input,textarea,select{max-width:100%;min-width:0;}
   .duplicate-review-row, .duplicate-warning-row { align-items: stretch; flex-direction: column; }
   .duplicate-review-actions { width: 100%; }
 }
+
+/* Fixed bottom navigation must not obscure interactive content on narrow screens.
+   Leave a comfortable scroll target below action buttons, and let clicks through
+   the nav's empty gaps without disabling its own navigation buttons. */
+@media (max-width: 860px) {
+  /* Use a real scrollport that ENDS above the fixed navigation. Browser
+     scrollIntoView and touch scrolling now agree on what is visible. */
+  .app-shell {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .workspace-content {
+    min-height: 0;
+    height: calc(100dvh - 86px - env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .workspace-content { scroll-padding-bottom: 24px; }
+  html { scroll-padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
+  .admin-section button,
+  .admin-section input,
+  .admin-section select,
+  .patient-form button,
+  .patient-form input {
+    scroll-margin-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  }
+  .mobile-nav { pointer-events: none; }
+  .mobile-nav button { pointer-events: auto; }
+}
