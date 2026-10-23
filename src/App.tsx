@@ -132,7 +132,7 @@ export default function App() {
             : nextPatients[0]?.id ?? null,
         );
       },
-      (error) => setDataError(error.code === 'permission-denied'
+      (error) => setDataError('code' in error && error.code === 'permission-denied'
         ? 'Your patient list could not be loaded. Check account approval and ensure the latest Firestore rules are deployed.'
         : error.message),
     );
