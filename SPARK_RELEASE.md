@@ -89,3 +89,19 @@ readable for authorized patient caregivers.
    secret store, a monitored workstation, retention policy and responsible staff.
 6. The app's auditEvents are client-submitted change records, not a complete,
    independent audit of read access or privileged Firebase Admin actions.
+
+## Optional Blaze-only attachment release gate
+
+The baseline app remains compatible with Firebase Spark only **without**
+file upload capability. The attachment module requires Cloud Storage for
+Firebase on Blaze, a private bucket and `storage.rules` deployed separately.
+The ordinary GitHub production workflow still deploys only hosting/firestore;
+it deliberately does not auto-provision Storage or change billing plans.
+
+Do not turn on `VITE_FIREBASE_STORAGE_BUCKET` in production before enabling
+Blaze, confirming IAM and rules-to-Firestore access, testing restricted doctor
+downloads and revocation, and arranging **independent Storage object backups**.
+Current manual encrypted clinic backup only covers Firestore documents, not
+the attached PDF/image files. Lab uploads are not automatically virus scanned.
+Protect patient documents against malware and define incident response,
+retention, secure deletion and clinical provenance before approving PHI rollout.
