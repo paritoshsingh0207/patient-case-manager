@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import type { DoctorProfile, Patient } from '../types';
-import { setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
+import { removePatientDoctorAccess, setDoctorActive, setPatientDoctors, subscribeDoctors } from '../services/adminService';
 import { inviteAdministrator } from '../services/provisioningService';
 
 interface AdminConsoleProps {db:Firestore;patients:Patient[];adminUid:string;}
@@ -20,6 +20,7 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
   const [selectedPatientId,setSelectedPatientId]=useState('');
   const [selectedDoctorIds,setSelectedDoctorIds]=useState<string[]>([]);
   const [savingAccess,setSavingAccess]=useState(false);
+  const [removingDoctorUid,setRemovingDoctorUid]=useState<string|null>(null);
 
   useEffect(()=>subscribeDoctors(db,setDoctors,err=>setError(err.message)),[db]);
   useEffect(()=>onSnapshot(query(collection(db,'users'),where('role','==','admin')),snap=>
@@ -66,6 +67,20 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
     finally{setBusyUid(null);}
   }
   function toggle(uid:string){setSelectedDoctorIds(ids=>ids.includes(uid)?ids.filter(x=>x!==uid):[...ids,uid]);}
+  async function removeDoctorAccess(doctorUid:string) {
+    if(!selectedPatient||removingDoctorUid||savingAccess)return;
+    const doctor=availableDoctors.find(d=>d.uid===doctorUid);
+    const doctorName=doctor?.displayName??`Doctor (${doctorUid})`;
+    if(!window.confirm(`Remove ${doctorName}'s access to ${selectedPatient.firstName} ${selectedPatient.lastName}? The doctor will no longer be able to view this patient's clinical history or prescriptions.`))return;
+    const patientId=selectedPatient.id;
+    setRemovingDoctorUid(doctorUid);setError('');setMessage('');
+    try {
+      await removePatientDoctorAccess(db,{patientId,doctorUid});
+      setSelectedDoctorIds(ids=>ids.filter(uid=>uid!==doctorUid));
+      setMessage(`${doctorName}'s access to this patient was removed.`);
+    }catch(e){setError(e instanceof Error?e.message:'Unable to remove doctor access.');}
+    finally{setRemovingDoctorUid(null);}
+  }
   async function saveAccess() {
     if(!selectedPatient)return;
     const unknown=selectedDoctorIds.filter(uid=>!availableDoctors.some(d=>d.uid===uid));
@@ -153,12 +168,27 @@ export function AdminConsole({db,patients,adminUid}:AdminConsoleProps) {
           </label>;
         })}
       </div>
-      {!availableDoctors.length?<div className="empty-list">Add a doctor to assign patients.</div>:null}
+      {!availableDoctors.length?<div className="empty-list">No active doctors available for assignment.</div>:null}
+      <div className="assigned-doctor-section">
+        <h3>Doctors currently assigned</h3>
+        {selectedPatient.doctorIds.length ? selectedPatient.doctorIds.map(uid=>{
+          const doctor=availableDoctors.find(d=>d.uid===uid);
+          return <div className="assigned-doctor-row" key={uid}>
+            <div><strong>{doctor?.displayName??`Doctor (${uid})`}</strong><small>{doctor?.email??'Previous assignment'}</small></div>
+            <button type="button" className="button secondary assigned-revoke-button"
+              aria-label={`Remove ${doctor?.displayName??uid} from ${selectedPatient.firstName} ${selectedPatient.lastName}`}
+              disabled={removingDoctorUid!==null||savingAccess}
+              onClick={()=>removeDoctorAccess(uid)}>
+              {removingDoctorUid===uid?'Removing…':'Remove access'}
+            </button>
+          </div>;
+        }):<p className="quiet-note">No doctors have access to this patient.</p>}
+      </div>
       {selectedDoctorIds.some(id=>!availableDoctors.some(d=>d.uid===id))?
         <div className="inline-error" role="alert">This patient has older or unknown doctor assignments. Check them in Firestore before saving.</div>:null}
       <div className="admin-actions">
         <span className="quiet-note">{selectedDoctorIds.length} assigned doctor(s)</span>
-        <button type="button" className="button primary" disabled={savingAccess||selectedDoctorIds.length>20||
+        <button type="button" className="button primary" disabled={savingAccess||removingDoctorUid!==null||selectedDoctorIds.length>20||
           selectedDoctorIds.some(id=>!availableDoctors.some(d=>d.uid===id))} onClick={saveAccess}>
           {savingAccess?'Saving…':'Save assignments'}</button>
       </div></>:<div className="empty-list">Select a patient to manage access.</div>}

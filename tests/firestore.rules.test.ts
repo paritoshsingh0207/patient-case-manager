@@ -16,6 +16,8 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
+  query,
+  where,
 } from 'firebase/firestore';
 
 let testEnv: RulesTestEnvironment;
@@ -465,5 +467,41 @@ describe('pending doctor activation remains admin controlled',()=>{
     const verified=testEnv.authenticatedContext('new-doctor',{email:'new-doctor@clinic.test',email_verified:true}).firestore();
     await assertSucceeds(getDoc(doc(verified,'patients/patient-a')));
     await assertFails(updateDoc(doc(verified,'users/new-doctor'),{role:'admin'}));
+  });
+});
+
+describe('live Firestore collection queries and per-patient revocation',()=>{
+  it('doctor query only returns assigned patients, not the entire clinic',async()=>{
+    await seedUser('admin','admin'); await seedUser('doctor-1','doctor');await seedUser('doctor-2','doctor');
+    await seedPatient('patient-a',['doctor-1']);await seedPatient('patient-b',['doctor-2']);
+    const a=testEnv.authenticatedContext('admin').firestore();
+    const d1=testEnv.authenticatedContext('doctor-1').firestore();
+    await assertSucceeds(getDocs(collection(a,'patients')));
+    const assigned=query(collection(d1,'patients'),where('doctorIds','array-contains','doctor-1'));
+    const results=await assertSucceeds(getDocs(assigned));
+    if(results.docs.map(d=>d.id).join(',')!=='patient-a')throw Error('Doctor query returned wrong patients');
+    await assertFails(getDocs(collection(d1,'patients')));
+  });
+  it('admin can revoke just one doctor; removed doctor loses patient and child access instantly',async()=>{
+    await seedUser('admin','admin');await seedUser('doctor-1','doctor');await seedUser('doctor-2','doctor');
+    await seedPatient('patient-a',['doctor-1','doctor-2']);
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    const d1=testEnv.authenticatedContext('doctor-1').firestore();
+    const d2=testEnv.authenticatedContext('doctor-2').firestore();
+    await assertSucceeds(getDoc(doc(d1,'patients/patient-a')));
+    await assertSucceeds(updateDoc(doc(admin,'patients/patient-a'),{doctorIds:['doctor-2']}));
+    await assertFails(getDoc(doc(d1,'patients/patient-a')));
+    await assertFails(getDocs(collection(d1,'patients/patient-a/cases')));
+    await assertSucceeds(getDoc(doc(d2,'patients/patient-a')));
+    await assertSucceeds(getDocs(collection(d2,'patients/patient-a/cases')));
+    await assertFails(updateDoc(doc(d2,'patients/patient-a'),{doctorIds:['doctor-1','doctor-2']}));
+  });
+  it('admin can unassign a doctor from an older patient without rewriting clinical history',async()=>{
+    await seedUser('admin','admin');await seedUser('doctor-1','doctor');
+    await testEnv.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),'patients/legacy'),{
+      doctorIds:['doctor-1'],firstName:'Old',lastName:'Record',ownerId:'doctor-1',
+    }));
+    const a=testEnv.authenticatedContext('admin').firestore();
+    await assertSucceeds(updateDoc(doc(a,'patients/legacy'),{doctorIds:[]}));
   });
 });

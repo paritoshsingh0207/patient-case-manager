@@ -1,5 +1,5 @@
 import {
-  collection, doc, onSnapshot, query, setDoc, updateDoc, serverTimestamp,
+  arrayRemove, collection, doc, onSnapshot, query, setDoc, updateDoc, serverTimestamp,
   type DocumentData, type Firestore, type QueryDocumentSnapshot, where,
 } from 'firebase/firestore';
 import type { DoctorProfile } from '../types';
@@ -50,4 +50,14 @@ export async function registerAdminProfile(db:Firestore,input:{uid:string;displa
   await setDoc(doc(db,'users',uid),{role:'admin',active:true,displayName,email,
     createdBy:input.adminUid,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
     statusUpdatedBy:input.adminUid});
+}
+
+/** Revoke exactly one doctor's access without overwriting concurrent assignments.
+ * All patient / case / prescription reads are protected by Firestore rules.
+ */
+export async function removePatientDoctorAccess(db:Firestore,input:{patientId:string;doctorUid:string}) {
+  if(!input.patientId.trim()||!input.doctorUid.trim())throw Error('Choose a valid patient and doctor.');
+  await updateDoc(doc(db,'patients',input.patientId),{
+    doctorIds:arrayRemove(input.doctorUid),updatedAt:serverTimestamp(),
+  });
 }
