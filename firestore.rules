@@ -207,6 +207,43 @@ service cloud.firestore {
           && request.resource.data.completedAt == request.time;
         allow delete: if false;
       }
+      // Immutable attachment metadata. Only an authorized current doctor or
+      // admin may register a pending patient file, and only its original uploader
+      // may commit the final state. Binary access has separate Storage Rules.
+      match /attachments/{attachmentId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if canAccessPatient(patientId)
+          && request.resource.data.keys().hasOnly([
+            'patientId','createdBy','originalName','contentType','sizeBytes',
+            'category','description','status','createdAt'])
+          && request.resource.data.keys().hasAll([
+            'patientId','createdBy','originalName','contentType','sizeBytes',
+            'category','description','status','createdAt'])
+          && request.resource.data.patientId == patientId
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.originalName is string
+          && request.resource.data.originalName.size() > 0
+          && request.resource.data.originalName.size() <= 160
+          && request.resource.data.contentType in ['application/pdf','image/jpeg','image/png']
+          && request.resource.data.sizeBytes is int
+          && request.resource.data.sizeBytes > 0
+          && request.resource.data.sizeBytes <= 10 * 1024 * 1024
+          && request.resource.data.category in ['lab-report','imaging','referral','other']
+          && request.resource.data.description is string
+          && request.resource.data.description.size() <= 500
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time;
+        allow update: if canAccessPatient(patientId)
+          && resource.data.createdBy == request.auth.uid
+          && resource.data.status == 'pending'
+          && request.resource.data.status in ['ready','failed']
+          && request.resource.data.uploadedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status','uploadedAt'])
+          && request.resource.data.diff(resource.data).affectedKeys()
+             .hasAll(['status','uploadedAt']);
+        allow delete: if false;
+      }
       match /prescriptions/{prescriptionId} {
         allow read: if canAccessPatient(patientId);
         allow create: if validPrescription(patientId);
