@@ -1,5 +1,5 @@
 import {
-  arrayRemove, collection, doc, onSnapshot, query, setDoc, updateDoc, serverTimestamp, writeBatch, orderBy, limit,
+  arrayRemove, collection, doc, onSnapshot, query, serverTimestamp, writeBatch, orderBy, limit,
   type DocumentData, type Firestore, type QueryDocumentSnapshot, where,
 } from 'firebase/firestore';
 import type { DoctorProfile } from '../types';
@@ -40,10 +40,13 @@ export async function registerDoctorProfile(db:Firestore,input:{uid:string;displ
   if(displayName.length<2||displayName.length>120)throw Error('Doctor name must be 2–120 characters.');
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||email.length>254)throw Error('Enter a valid email address.');
   if(uid===input.adminUid)throw Error('Create a separate Firebase Authentication account for each doctor.');
-  await setDoc(doc(db,'users',uid),{
+  const batch=writeBatch(db);
+  batch.set(doc(db,'users',uid),{
     role:'doctor',active:true,displayName,email,createdBy:input.adminUid,
     createdAt:serverTimestamp(),updatedAt:serverTimestamp(),statusUpdatedBy:input.adminUid,
   });
+  addAudit(batch,db,input.adminUid,'doctor_registered','doctor',uid);
+  await batch.commit();
 }
 /** Only the active flag may change from the browser; audited by Firestore rules. */
 export async function setDoctorActive(db:Firestore,input:{uid:string;active:boolean;adminUid:string}) {
@@ -66,9 +69,12 @@ export async function registerAdminProfile(db:Firestore,input:{uid:string;displa
   const uid=input.uid.trim(),displayName=input.displayName.trim(),email=input.email.trim().toLowerCase();
   if(!/^[A-Za-z0-9_-]{6,128}$/.test(uid)||uid===input.adminUid)throw Error('Enter a separate verified Authentication UID.');
   if(displayName.length<2||displayName.length>120||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))throw Error('Enter a valid name and email.');
-  await setDoc(doc(db,'users',uid),{role:'admin',active:true,displayName,email,
+  const batch=writeBatch(db);
+  batch.set(doc(db,'users',uid),{role:'admin',active:true,displayName,email,
     createdBy:input.adminUid,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
     statusUpdatedBy:input.adminUid});
+  addAudit(batch,db,input.adminUid,'administrator_invited','administrator',uid);
+  await batch.commit();
 }
 
 /** Revoke exactly one doctor's access without overwriting concurrent assignments.

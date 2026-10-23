@@ -15,6 +15,7 @@ import {
   deleteDoc,
   setDoc,
   updateDoc,
+  writeBatch,
   serverTimestamp,
   query,
   where,
@@ -562,5 +563,23 @@ describe('Priority 1: internal follow-up permissions',()=>{
   await assertSucceeds(updateDoc(ref,{status:'completed',completedAt:serverTimestamp(),completedBy:'d1'}));
   await assertFails(updateDoc(ref,{status:'open'}));
   await assertFails(deleteDoc(ref));
+ });
+});
+
+describe('Priority 0: administrator invitation audit remains append-only',()=>{
+ it('supports an atomically recorded administrator invitation',async()=>{
+  await seedUser('admin','admin');
+  const a=testEnv.authenticatedContext('admin').firestore();
+  const b=writeBatch(a);
+  b.set(doc(a,'users/second-admin'),{
+    role:'admin',active:true,displayName:'Another Administrator',email:'second@example.com',
+    createdBy:'admin',createdAt:serverTimestamp(),updatedAt:serverTimestamp(),statusUpdatedBy:'admin',
+  });
+  b.set(doc(a,'auditEvents/new-admin-event'),{
+    actorUid:'admin',action:'administrator_invited',targetType:'administrator',targetId:'second-admin',
+    recordedAt:serverTimestamp(),
+  });
+  await assertSucceeds(b.commit());
+  await assertSucceeds(getDoc(doc(a,'auditEvents/new-admin-event')));
  });
 });

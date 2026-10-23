@@ -214,8 +214,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['actorUid','action','targetType','targetId','recordedAt'])
         && request.resource.data.keys().hasAll(['actorUid','action','targetType','targetId','recordedAt'])
         && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['doctor_activated','doctor_deactivated','care_team_changed','doctor_patient_access_revoked']
-        && request.resource.data.targetType in ['doctor','patient']
+        && request.resource.data.action in ['doctor_activated','doctor_deactivated','care_team_changed','doctor_patient_access_revoked','administrator_invited','doctor_registered']
+        && request.resource.data.targetType in ['doctor','patient','administrator']
         && request.resource.data.targetId is string
         && request.resource.data.targetId.size() > 0
         && request.resource.data.targetId.size() <= 128

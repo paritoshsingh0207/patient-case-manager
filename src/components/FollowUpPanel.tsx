@@ -33,7 +33,7 @@ export function FollowUpPanel({db,patientId,userId,canManage}:{
  }
  return <section className="workspace-card glass-panel followup-panel">
   <div className="section-heading"><div><h2>Clinical follow-ups</h2>
-   <p className="section-copy">Track review dates for this patient. Booking and external reminders remain on Awakening.</p></div>
+   <p className="section-copy">Track review dates and clinical tasks for this patient.</p></div>
    <span className="status-pill">{pending.length} open</span>
   </div>
   {canManage?<form className="followup-form" onSubmit={save}>
