@@ -583,3 +583,33 @@ describe('Priority 0: administrator invitation audit remains append-only',()=>{
   await assertSucceeds(getDoc(doc(a,'auditEvents/new-admin-event')));
  });
 });
+
+describe('patient profile edits preserve care-team security', () => {
+  it('allows assigned clinicians and admin to amend allergy notes, but never unassigned clinicians', async () => {
+    await seedUser('admin','admin');
+    await seedUser('assigned','doctor');
+    await seedUser('outsider','doctor');
+    await seedPatient('patient-edit',['assigned']);
+    const assigned = testEnv.authenticatedContext('assigned').firestore();
+    const outsider = testEnv.authenticatedContext('outsider').firestore();
+    const admin = testEnv.authenticatedContext('admin').firestore();
+    await assertSucceeds(updateDoc(doc(assigned,'patients/patient-edit'), {
+      allergies: 'Newly documented medication allergy',
+      currentMedications: 'Clinician-reviewed medicine list',
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(doc(admin,'patients/patient-edit'), {
+      address: 'Updated clinic contact details', updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(outsider,'patients/patient-edit'), {
+      allergies: 'Unauthorized change', updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(assigned,'patients/patient-edit'), {
+      doctorIds: ['assigned','outsider'],
+    }));
+    await assertFails(updateDoc(doc(assigned,'patients/patient-edit'), {
+      createdBy: 'assigned',
+    }));
+    await assertSucceeds(getDoc(doc(assigned,'patients/patient-edit/cases/case-1')));
+  });
+});
