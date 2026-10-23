@@ -20,6 +20,7 @@ or Cloud Storage. The functions/ directory holds trusted offline admin scripts.
 - Internal per-patient clinical follow-up tracker (due date, reason and completion) without public booking, messaging or appointment intake; the Awakening website owns booking.
 - Structured case assessments (vitals, assessment, plan) and read-only comparison with previous consultations. Signed previous cases remain immutable.
 - Authorized clinicians can edit patient demographics, medical history, allergies and medicine lists; concurrent edits to the same field are blocked to prevent unnoticed overwrites, and assignments remain admin-controlled.
+- Patient creation warns about **possible duplicates** using pairs of matching identity details. Doctors see only assigned charts; administrators can review potential duplicates clinic-wide. Creating another record despite a warning requires explicit acknowledgement; charts are never merged automatically.
 - Append-only recent admin activity for doctor status and patient access changes; this does not replace server-side comprehensive audit logging.
 - No file attachments / Cloud Storage feature, automated backups, or backup restoration tooling.
 
@@ -143,3 +144,20 @@ writing any data:
     node functions/scripts/clinic-backup.cjs check-staging --file="C:\private-clinic-backups\2026-10-23.pcmbackup" --project=your-isolated-staging
 
 The restore command also runs this comparison automatically after all writes.
+
+## Possible duplicate patient charts
+
+Before creating a patient, the form checks matching names with dates of birth,
+phones or emails (and a shared DOB with a matching contact detail). A phone
+number or family email **alone** is not evidence of the same patient.
+Matching is advisory, not a guaranteed identity system: spelling variants,
+missing details or simultaneous registrations may escape detection.
+
+Patient creation performs a fresh, authorized server read before saving and
+fails closed if that directory check cannot complete. It is not a global
+atomic uniqueness lock. Doctors review matches **only among assigned patients**.
+They cannot search charts belonging exclusively to other doctors or access
+private patient details through this feature. Administrators can inspect
+clinic-wide duplicate pairs under Administration. Staff must confirm identity
+before reusing any chart. There is no automatic merge, deletion or reassignment
+of past medical history or prescriptions. Preserve existing chart identifiers.

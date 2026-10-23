@@ -3012,3 +3012,23 @@ input,textarea,select{max-width:100%;min-width:0;}
 
 /* A single explicit chart action opens controlled edits; case history remains immutable. */
 .patient-edit-action { margin-top: 10px; padding: 7px 11px; font-size: 11px; }
+
+/* Potential duplicates are identity warnings, never auto-merges. */
+.duplicate-warning { border: 1px solid #cc9b56; background: #fff9ec; border-radius: 10px; padding: 14px; }
+.duplicate-warning > strong { display: block; font-size: 14px; color: #744918; }
+.duplicate-warning p { margin: 6px 0 12px; font-size: 12px; line-height: 1.6; color: #685c47; }
+.duplicate-warning-list, .duplicate-review-list { display: grid; gap: 8px; }
+.duplicate-warning-row, .duplicate-review-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; background: #fff; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.duplicate-warning-row strong, .duplicate-review-row strong { display: block; font-size: 12px; }
+.duplicate-warning-row small, .duplicate-review-row small { display: block; font-size: 11px; margin-top: 4px; color: var(--muted); line-height: 1.5; }
+.duplicate-warning-row button, .duplicate-review-row button { flex: 0 0 auto; }
+.duplicate-confirmation { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; font-size: 12px; line-height: 1.5; font-weight: 700; }
+.duplicate-confirmation input { flex: 0 0 auto; width: 16px; height: 16px; margin-top: 1px; }
+.duplicate-review { margin-bottom: 18px; }
+.duplicate-review > summary { cursor: pointer; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.duplicate-review > .section-copy { margin-top: 12px; }
+.duplicate-review-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 680px) {
+  .duplicate-review-row, .duplicate-warning-row { align-items: stretch; flex-direction: column; }
+  .duplicate-review-actions { width: 100%; }
+}
