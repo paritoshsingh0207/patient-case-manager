@@ -74,6 +74,7 @@ export default function App() {
 
     return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
+      setDataError('');
       setAccessProfile(null);
       setAccessChecked(false);
       setActiveView('overview');
@@ -123,6 +124,7 @@ export default function App() {
       user.uid,
       accessProfile.role,
       (nextPatients) => {
+        setDataError('');
         setPatients(nextPatients);
         setSelectedPatientId((current) =>
           current && nextPatients.some((patient) => patient.id === current)
@@ -130,7 +132,9 @@ export default function App() {
             : nextPatients[0]?.id ?? null,
         );
       },
-      (error) => setDataError(error.message),
+      (error) => setDataError(error.code === 'permission-denied'
+        ? 'Your patient list could not be loaded. Check account approval and ensure the latest Firestore rules are deployed.'
+        : error.message),
     );
   }, [user, authorized, accessProfile]);
 

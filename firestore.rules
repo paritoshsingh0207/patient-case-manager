@@ -155,19 +155,19 @@ service cloud.firestore {
       allow create: if isDoctor()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.doctorIds == [request.auth.uid];
+      // Query-safe: matches doctors' `array-contains` filter; never allows unfiltered doctor lists.
       allow read: if isAdmin() || (isDoctor()
-        && resource.data.doctorIds is list
         && request.auth.uid in resource.data.doctorIds);
       // Admin can manage care teams without Cloud Functions. Active status is
       // independently checked on every doctor read; only admins can share.
       allow update: if isAdmin()
-        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null)
         && request.resource.data.doctorIds is list
         && request.resource.data.doctorIds.size() <= 20;
       allow update: if isDoctor()
         && request.auth.uid in resource.data.doctorIds
         && request.resource.data.doctorIds == resource.data.doctorIds
-        && request.resource.data.createdBy == resource.data.createdBy;
+        && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null);
       allow delete: if false;
       match /cases/{caseId} {
         allow read: if canAccessPatient(patientId);
