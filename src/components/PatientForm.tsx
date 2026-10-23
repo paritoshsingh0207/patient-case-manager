@@ -4,7 +4,7 @@ import { patientInputFromRecord } from '../lib/patientEdits';
 import { findPotentialDuplicates } from '../lib/patientDuplicates';
 
 interface PatientFormProps {
-  onSubmit: (input: PatientInput, confirmedPotentialDuplicate?: boolean) => Promise<void>;
+  onSubmit: (input: PatientInput, reviewedMatchIds?: string[]) => Promise<void>;
   onCancel: () => void;
   initialPatient?: Patient;
   possiblePatients?: Patient[];
@@ -34,11 +34,15 @@ export function PatientForm({ onSubmit, onCancel, initialPatient, possiblePatien
     ? patientInputFromRecord(initialPatient) : { ...emptyPatient });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [confirmedPotentialDuplicate, setConfirmedPotentialDuplicate] = useState(false);
+  const [reviewedMatchSignature, setReviewedMatchSignature] = useState<string | null>(null);
   const matches = isEditing ? [] : findPotentialDuplicates(form, possiblePatients);
+  const matchSignature = JSON.stringify(matches.map(match => ({
+    id: match.patient.id, reasons: match.reasons,
+  })));
+  const confirmedPotentialDuplicate = reviewedMatchSignature === matchSignature;
 
   function update<K extends keyof PatientInput>(key: K, value: PatientInput[K]) {
-    setConfirmedPotentialDuplicate(false);
+    setReviewedMatchSignature(null);
     setForm((current) => ({ ...current, [key]: value }));
   }
 
@@ -55,7 +59,7 @@ export function PatientForm({ onSubmit, onCancel, initialPatient, possiblePatien
     setSaving(true);
     setError('');
     try {
-      await onSubmit(form, !isEditing && confirmedPotentialDuplicate);
+      await onSubmit(form, !isEditing && confirmedPotentialDuplicate ? matches.map(match => match.patient.id) : []);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save patient.');
     } finally {
@@ -102,7 +106,7 @@ export function PatientForm({ onSubmit, onCancel, initialPatient, possiblePatien
                 the existing chart before opening a second record. Matching fields are clues,
                 not proof of identity.</p>
               <div className="duplicate-warning-list">
-                {matches.slice(0, 8).map(match => (
+                {matches.map(match => (
                   <div key={match.patient.id} className="duplicate-warning-row">
                     <div>
                       <strong>{match.patient.firstName} {match.patient.lastName}</strong>
@@ -113,10 +117,9 @@ export function PatientForm({ onSubmit, onCancel, initialPatient, possiblePatien
                   </div>
                 ))}
               </div>
-              {matches.length > 8 ? <p>Showing 8 of {matches.length} matches.</p> : null}
               <label className="duplicate-confirmation">
                 <input type="checkbox" checked={confirmedPotentialDuplicate}
-                  onChange={event => setConfirmedPotentialDuplicate(event.target.checked)} />
+                  onChange={event => setReviewedMatchSignature(event.target.checked ? matchSignature : null)} />
                 I checked the possible matches and still need to create a separate patient record.
               </label>
             </section>
