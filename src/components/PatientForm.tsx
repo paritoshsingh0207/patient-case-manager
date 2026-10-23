@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import type { PatientInput, Sex } from '../types';
+import type { Patient, PatientInput, Sex } from '../types';
+import { patientInputFromRecord } from '../lib/patientEdits';
 
 interface PatientFormProps {
   onSubmit: (input: PatientInput) => Promise<void>;
   onCancel: () => void;
+  initialPatient?: Patient;
 }
 
 const emptyPatient: PatientInput = {
@@ -21,8 +23,10 @@ const emptyPatient: PatientInput = {
   currentMedications: '',
 };
 
-export function PatientForm({ onSubmit, onCancel }: PatientFormProps) {
-  const [form, setForm] = useState<PatientInput>(emptyPatient);
+export function PatientForm({ onSubmit, onCancel, initialPatient }: PatientFormProps) {
+  const isEditing = Boolean(initialPatient);
+  const [form, setForm] = useState<PatientInput>(() => initialPatient
+    ? patientInputFromRecord(initialPatient) : { ...emptyPatient });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -45,11 +49,11 @@ export function PatientForm({ onSubmit, onCancel }: PatientFormProps) {
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-patient-title">
+      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="patient-form-title">
         <div className="modal-header">
           <div>
             <p className="eyebrow">Patient record</p>
-            <h2 id="new-patient-title">Add patient</h2>
+            <h2 id="patient-form-title">{isEditing ? "Edit patient profile" : "Add patient"}</h2>
           </div>
           <button className="icon-button" onClick={onCancel} type="button" aria-label="Close">×</button>
         </div>
@@ -77,8 +81,8 @@ export function PatientForm({ onSubmit, onCancel }: PatientFormProps) {
           </div>
           {error ? <div className="inline-error">{error}</div> : null}
           <div className="modal-actions">
-            <button type="button" className="button secondary" onClick={onCancel}>Cancel</button>
-            <button type="submit" className="button primary" disabled={saving}>{saving ? 'Saving…' : 'Create patient'}</button>
+            <button type="button" className="button secondary" disabled={saving} onClick={onCancel}>Cancel</button>
+            <button type="submit" className="button primary" disabled={saving}>{saving ? 'Saving…' : isEditing ? 'Save changes' : 'Create patient'}</button>
           </div>
         </form>
       </section>
