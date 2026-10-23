@@ -9,6 +9,7 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
   runTransaction,
+  updateDoc,
   where,
 } from 'firebase/firestore';
 import type {
@@ -19,7 +20,7 @@ import type {
   PatientInput,
   SuggestionResult,
 } from '../types';
-import { assertPatientFieldsUnchanged, changedPatientFields } from '../lib/patientEdits';
+import { assertPatientFieldsUnchanged, changedPatientFields, validatePatientInput } from '../lib/patientEdits';
 
 function toDate(value: unknown): Date | undefined {
   if (
@@ -131,6 +132,7 @@ export async function createPatient(
   role: AppRole,
   input: PatientInput,
 ) {
+  validatePatientInput(input);
   return addDoc(collection(db, 'patients'), {
     ...input,
     createdBy: userId,
