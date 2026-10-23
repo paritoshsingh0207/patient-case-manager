@@ -445,3 +445,25 @@ describe('doctor self-registration and admin controls',()=>{
     await assertFails(setDoc(doc(doctor,'users/forged-admin'),{...data,createdBy:'saurabh',statusUpdatedBy:'saurabh'}));
   });
 });
+
+
+describe('pending doctor activation remains admin controlled',()=>{
+  it('lets admin approve a pending doctor but keeps unverified email from reading patients',async()=>{
+    await seedUser('admin','admin');
+    await seedPatient('patient-a',['new-doctor']);
+    const applicant=testEnv.authenticatedContext('new-doctor',{email:'new-doctor@clinic.test',email_verified:false}).firestore();
+    const admin=testEnv.authenticatedContext('admin').firestore();
+    await assertSucceeds(setDoc(doc(applicant,'users/new-doctor'),{
+      role:'doctor',active:false,displayName:'Dr New',email:'new-doctor@clinic.test',
+      registrationMethod:'self',createdAt:serverTimestamp(),
+    }));
+    await assertFails(getDoc(doc(applicant,'patients/patient-a')));
+    await assertSucceeds(updateDoc(doc(admin,'users/new-doctor'),{
+      active:true,updatedAt:serverTimestamp(),statusUpdatedBy:'admin',
+    }));
+    await assertFails(getDoc(doc(applicant,'patients/patient-a')));
+    const verified=testEnv.authenticatedContext('new-doctor',{email:'new-doctor@clinic.test',email_verified:true}).firestore();
+    await assertSucceeds(getDoc(doc(verified,'patients/patient-a')));
+    await assertFails(updateDoc(doc(verified,'users/new-doctor'),{role:'admin'}));
+  });
+});

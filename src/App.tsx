@@ -248,7 +248,7 @@ export default function App() {
         <div className="workspace-utility">
           <div className="clinic-heading">
             <span className="clinic-identity">{import.meta.env.VITE_CLINIC_NAME?.trim() || 'Clinical Workspace'}</span>
-            <span className="clinic-context">Private clinical records · {new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',year:'numeric'}).format(new Date())}</span>
+            <span className="clinic-context">{new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',year:'numeric'}).format(new Date())}</span>
           </div>
           <div className="workspace-account">
             <span className="role-pill">{isAdmin?'Administrator':'Doctor'}</span>
@@ -335,7 +335,7 @@ function ClinicOverview({patients,cases,selectedPatient,isAdmin,onOpenPatient,on
   const recent=[...patients].sort((a,b)=>(b.createdAt?.getTime()??0)-(a.createdAt?.getTime()??0)).slice(0,6);
   const assignments=patients.reduce((n,p)=>n+p.doctorIds.length,0);
   return <div className="clinic-overview">
-    <div className="overview-intro"><div><p className="eyebrow">PATIENT CARE</p><h2>Welcome to your workspace</h2>
+    <div className="overview-intro"><div><p className="eyebrow">PATIENT CARE</p><h2>Clinic overview</h2>
       <p>Your clinical records and patient directory are available in one place.</p></div>
       <button type="button" className="button primary" onClick={onAddPatient}><ClinicIcon name="plus"/> New patient</button>
     </div>
