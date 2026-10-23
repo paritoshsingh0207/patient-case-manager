@@ -424,12 +424,12 @@ describe('doctor self-registration and admin controls',()=>{
     const applicant=testEnv.authenticatedContext('new-doctor',{email:'new-doctor@clinic.test'}).firestore();
     await assertSucceeds(setDoc(doc(applicant,'users/new-doctor'),{
       role:'doctor',active:false,displayName:'Dr New Doctor',
-      email:'new-doctor@clinic.test',createdAt:serverTimestamp(),
+      email:'new-doctor@clinic.test',registrationMethod:'self',createdAt:serverTimestamp(),
     }));
     await assertFails(updateDoc(doc(applicant,'users/new-doctor'),{active:true}));
     await assertFails(setDoc(doc(applicant,'users/another-user'),{
       role:'doctor',active:false,displayName:'Other',
-      email:'new-doctor@clinic.test',createdAt:serverTimestamp(),
+      email:'new-doctor@clinic.test',registrationMethod:'self',createdAt:serverTimestamp(),
     }));
   });
   it('requires existing admin to grant admin role and prevents doctors from promoting themselves',async()=>{

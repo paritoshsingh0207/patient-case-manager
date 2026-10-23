@@ -10,7 +10,8 @@ service cloud.firestore {
     }
     function isActiveMember() {
       return hasProfile() && profile().active == true
-        && profile().role in ['admin', 'doctor', 'practitioner'];
+        && profile().role in ['admin', 'doctor', 'practitioner']
+        && (profile().get('registrationMethod','legacy') != 'self' || request.auth.token.email_verified == true);
     }
     function isAdmin() { return isActiveMember() && profile().role == 'admin'; }
     function isDoctor() {
@@ -84,9 +85,10 @@ service cloud.firestore {
       allow create: if signedIn() && userId == request.auth.uid
         && request.auth.token.email is string
         && request.auth.token.email == request.resource.data.email
-        && request.resource.data.keys().hasOnly(['role','active','displayName','email','createdAt'])
-        && request.resource.data.keys().hasAll(['role','active','displayName','email','createdAt'])
+        && request.resource.data.keys().hasOnly(['role','active','displayName','email','createdAt','registrationMethod'])
+        && request.resource.data.keys().hasAll(['role','active','displayName','email','createdAt','registrationMethod'])
         && request.resource.data.role == 'doctor'
+        && request.resource.data.registrationMethod == 'self'
         && request.resource.data.active == false
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() >= 2

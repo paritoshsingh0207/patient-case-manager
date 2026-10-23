@@ -141,7 +141,7 @@ export function PrescriptionPanel({
               Only active, expert-approved medicine codes can be prescribed. Keep full medicine identity available to authorized dispensers and patients as required.
             </p>
           </div>
-          <span className="status-pill">Spark · approved code</span>
+          <span className="status-pill">Prescription</span>
         </div>
 
         {canPrescribe ? (

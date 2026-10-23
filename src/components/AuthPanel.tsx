@@ -36,7 +36,7 @@ export function AuthPanel({auth,onBeginSignIn}:AuthPanelProps) {
       const result=await createUserWithEmailAndPassword(auth,email.trim(),password);
       try {
         await setDoc(doc(db,'users',result.user.uid),{role:'doctor',active:false,
-          displayName:fullName.trim(),email:result.user.email,createdAt:serverTimestamp()});
+          displayName:fullName.trim(),email:result.user.email,registrationMethod:'self',createdAt:serverTimestamp()});
       }catch{setError('Login created, but approval request could not be saved. Contact the administrator.');return;}
       try{await sendEmailVerification(result.user);}catch{/* Non-blocking verification email. */}
       onBeginSignIn('doctor');

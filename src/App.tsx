@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ClinicIcon, type ClinicIconName } from './components/ClinicIcon';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, reload, sendEmailVerification, signOut, type User } from 'firebase/auth';
 import type {
   CaseInput,
   CaseRecord,
@@ -53,6 +53,7 @@ function viewTitle(view: WorkspaceView) {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loginRole, setLoginRole] = useState<LoginRole | null>(null);
+  const [verificationRefresh,setVerificationRefresh]=useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessProfile, setAccessProfile] = useState<PractitionerAccess | null>(null);
@@ -107,7 +108,8 @@ export default function App() {
     );
   }, [user]);
 
-  const authorized = hasWorkspaceAccess(accessProfile);
+  const verificationNeeded = accessProfile?.registrationMethod === 'self' && user?.emailVerified !== true;
+  const authorized = hasWorkspaceAccess(accessProfile) && !verificationNeeded;
 
   useEffect(() => {
     if (!user || !db || !authorized || !accessProfile) {
@@ -178,7 +180,9 @@ export default function App() {
   }
 
   if (!authorized || !accessProfile) {
-    return <AccessDenied email={user.email} onSignOut={() => signOut(activeAuth)} />;
+    return <AccessDenied email={user.email} requiresVerification={verificationNeeded}
+      onRefresh={async()=>{await reload(user);await user.getIdToken(true);setVerificationRefresh(x=>x+1);}}
+      onResend={()=>sendEmailVerification(user)} onSignOut={() => signOut(activeAuth)} />;
   }
   if (!matchesLoginRole(accessProfile, loginRole)) {
     return <RoleMismatch selected={loginRole!} onSignOut={async () => {
@@ -574,7 +578,8 @@ function RoleMismatch({selected,onSignOut}:{selected:LoginRole;onSignOut:()=>voi
   </section></main>;
 }
 
-function AccessDenied({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
+function AccessDenied({ email, onSignOut, requiresVerification, onRefresh, onResend }: { email: string | null; onSignOut: () => void; requiresVerification:boolean; onRefresh:()=>Promise<void>;onResend:()=>Promise<void> }) {
+  const [notice,setNotice]=useState('');
   return (
     <main className="access-shell">
       <div className="access-orb" aria-hidden="true" />
@@ -586,6 +591,12 @@ function AccessDenied({ email, onSignOut }: { email: string | null; onSignOut: (
           Your account is awaiting administrator approval or has been deactivated. Please contact the clinic administrator.
         </p>
         {email ? <div className="identity-chip">{email}</div> : null}
+        {requiresVerification?<div className="account-verification-actions">
+          <p>Verify your email address before you can access your approved account.</p>
+          <button type="button" className="button secondary" onClick={async()=>{try{await onResend();setNotice('Verification email sent.');}catch{setNotice('Could not send verification email.');}}}>Resend verification email</button>
+          <button type="button" className="button secondary" onClick={async()=>{try{await onRefresh();setNotice('Account status refreshed.');}catch{setNotice('Unable to check verification.');}}}>I verified my email</button>
+        </div>:null}
+        {notice?<p role="status">{notice}</p>:null}
         <button className="button primary" onClick={onSignOut}>Return to sign in</button>
       </section>
     </main>

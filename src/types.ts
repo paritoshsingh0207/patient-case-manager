@@ -7,6 +7,7 @@ export interface PractitionerAccess {
   role: AppRole;
   displayName?: string;
   email?: string;
+  registrationMethod?: 'self';
 }
 
 export interface DoctorProfile {
