@@ -80,6 +80,18 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
+      // Self registration may only create a non-active doctor profile.
+      allow create: if signedIn() && userId == request.auth.uid
+        && request.auth.token.email is string
+        && request.auth.token.email == request.resource.data.email
+        && request.resource.data.keys().hasOnly(['role','active','displayName','email','createdAt'])
+        && request.resource.data.keys().hasAll(['role','active','displayName','email','createdAt'])
+        && request.resource.data.role == 'doctor'
+        && request.resource.data.active == false
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 120
+        && request.resource.data.createdAt == request.time;
       // Only an active administrator can link an existing Auth UID as a doctor.
       allow create: if isAdmin()
         && userId != request.auth.uid

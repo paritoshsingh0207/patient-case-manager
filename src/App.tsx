@@ -583,8 +583,7 @@ function AccessDenied({ email, onSignOut }: { email: string | null; onSignOut: (
         <p className="eyebrow">Authorization required</p>
         <h1>This account is not enabled for the application.</h1>
         <p>
-          Authentication succeeded, but this account is not currently an active doctor or administrator.
-          Contact the administrator if you believe this is an error.
+          Your account is awaiting administrator approval or has been deactivated. Please contact the clinic administrator.
         </p>
         {email ? <div className="identity-chip">{email}</div> : null}
         <button className="button primary" onClick={onSignOut}>Return to sign in</button>
