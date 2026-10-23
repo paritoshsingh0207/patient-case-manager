@@ -664,3 +664,42 @@ describe('patient duplicate warnings and privacy boundary', () => {
     expect((await getDoc(doc(other,'patients',created.id))).exists()).toBe(true);
   });
 });
+
+
+describe('patient attachment metadata permissions', () => {
+  const record = {
+    patientId:'patient-a',createdBy:'doctor-a',
+    originalName:'cbc.pdf',contentType:'application/pdf',sizeBytes:1024,
+    category:'lab-report',description:'CBC',status:'pending',createdAt:serverTimestamp(),
+  };
+  it('requires assigned doctor or administrator to create and read metadata',async()=>{
+    await seedUser('doctor-a','doctor');await seedUser('doctor-b','doctor');
+    await seedUser('administrator','admin');await seedPatient('patient-a',['doctor-a']);
+    const assigned=testEnv.authenticatedContext('doctor-a').firestore();
+    const unassigned=testEnv.authenticatedContext('doctor-b').firestore();
+    const admin=testEnv.authenticatedContext('administrator').firestore();
+    const attachment=doc(assigned,'patients/patient-a/attachments/abc');
+    await assertSucceeds(setDoc(attachment,record));
+    await assertSucceeds(getDoc(doc(admin,'patients/patient-a/attachments/abc')));
+    await assertFails(getDoc(doc(unassigned,'patients/patient-a/attachments/abc')));
+    await assertFails(setDoc(doc(unassigned,'patients/patient-a/attachments/evil'),{
+      ...record,createdBy:'doctor-b',
+    }));
+    await assertSucceeds(updateDoc(attachment,{status:'ready',uploadedAt:serverTimestamp()}));
+    await assertFails(updateDoc(attachment,{originalName:'changed.pdf'}));
+    await assertFails(deleteDoc(attachment));
+  });
+  it('blocks changing uploader and finalizing someone else\'s metadata',async()=>{
+    await seedUser('doctor-a','doctor');await seedUser('doctor-b','doctor');
+    await seedPatient('patient-a',['doctor-a','doctor-b']);
+    const creator=testEnv.authenticatedContext('doctor-a').firestore();
+    const collaborator=testEnv.authenticatedContext('doctor-b').firestore();
+    await assertSucceeds(setDoc(doc(creator,'patients/patient-a/attachments/original'),record));
+    await assertFails(updateDoc(doc(collaborator,'patients/patient-a/attachments/original'),{
+      status:'ready',uploadedAt:serverTimestamp(),
+    }));
+    await assertFails(setDoc(doc(creator,'patients/patient-a/attachments/malicious'),{
+      ...record,contentType:'text/html',
+    }));
+  });
+});
