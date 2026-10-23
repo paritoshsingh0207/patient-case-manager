@@ -8,6 +8,7 @@ import {
   type DocumentData,
   type Firestore,
   type QueryDocumentSnapshot,
+  runTransaction,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -19,6 +20,7 @@ import type {
   PatientInput,
   SuggestionResult,
 } from '../types';
+import { assertPatientFieldsUnchanged, changedPatientFields, validatePatientInput } from '../lib/patientEdits';
 
 function toDate(value: unknown): Date | undefined {
   if (
@@ -130,6 +132,7 @@ export async function createPatient(
   role: AppRole,
   input: PatientInput,
 ) {
+  validatePatientInput(input);
   return addDoc(collection(db, 'patients'), {
     ...input,
     createdBy: userId,
@@ -139,14 +142,24 @@ export async function createPatient(
   });
 }
 
+/** Profile changes use a transaction so two clinicians cannot silently overwrite
+ * the same field. Firestore rules still enforce active patient assignment.
+ */
 export async function updatePatient(
   db: Firestore,
   patientId: string,
   input: PatientInput,
+  original: PatientInput,
 ) {
-  await updateDoc(doc(db, 'patients', patientId), {
-    ...input,
-    updatedAt: serverTimestamp(),
+  const changed = changedPatientFields(original, input);
+  if (!Object.keys(changed).length) return;
+
+  const reference = doc(db, 'patients', patientId);
+  await runTransaction(db, async transaction => {
+    const current = await transaction.get(reference);
+    if (!current.exists()) throw Error('This patient record is no longer available.');
+    assertPatientFieldsUnchanged(current.data(), original, changed);
+    transaction.update(reference, { ...changed, updatedAt: serverTimestamp() });
   });
 }
 

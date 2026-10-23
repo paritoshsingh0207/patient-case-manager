@@ -19,6 +19,7 @@ or Cloud Storage. The functions/ directory holds trusted offline admin scripts.
   voided with an audit reason but cannot be silently deleted or changed.
 - Internal per-patient clinical follow-up tracker (due date, reason and completion) without public booking, messaging or appointment intake; the Awakening website owns booking.
 - Structured case assessments (vitals, assessment, plan) and read-only comparison with previous consultations. Signed previous cases remain immutable.
+- Authorized clinicians can edit patient demographics, medical history, allergies and medicine lists; concurrent edits to the same field are blocked to prevent unnoticed overwrites, and assignments remain admin-controlled.
 - Append-only recent admin activity for doctor status and patient access changes; this does not replace server-side comprehensive audit logging.
 - No file attachments / Cloud Storage feature, automated backups, or backup restoration tooling.
 

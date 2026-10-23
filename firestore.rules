@@ -164,10 +164,17 @@ service cloud.firestore {
         && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null)
         && request.resource.data.doctorIds is list
         && request.resource.data.doctorIds.size() <= 20;
+      // Doctors can maintain patient demographics and safety notes only.
+      // Clinical history and permissions remain outside editable profile fields.
       allow update: if isDoctor()
         && request.auth.uid in resource.data.doctorIds
         && request.resource.data.doctorIds == resource.data.doctorIds
-        && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null);
+        && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'firstName', 'lastName', 'dateOfBirth', 'sex', 'phone', 'email',
+          'occupation', 'address', 'medicalHistory', 'familyHistory',
+          'allergies', 'currentMedications', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time;
       allow delete: if false;
       match /cases/{caseId} {
         allow read: if canAccessPatient(patientId);
