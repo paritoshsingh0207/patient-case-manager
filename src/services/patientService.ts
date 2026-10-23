@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDocsFromServer,
   onSnapshot,
   query,
   serverTimestamp,
@@ -21,6 +22,7 @@ import type {
   SuggestionResult,
 } from '../types';
 import { assertPatientFieldsUnchanged, changedPatientFields, validatePatientInput } from '../lib/patientEdits';
+import { findPotentialDuplicates } from '../lib/patientDuplicates';
 
 function toDate(value: unknown): Date | undefined {
   if (
@@ -131,8 +133,20 @@ export async function createPatient(
   userId: string,
   role: AppRole,
   input: PatientInput,
+  confirmedPotentialDuplicate = false,
 ) {
   validatePatientInput(input);
+  // The fresh server read blocks creation when the directory cannot be checked.
+  // Doctors see only assigned patients; admins can review the whole clinic.
+  // This does not create a global atomic identity uniqueness constraint.
+  const patientsQuery = role === 'admin'
+    ? collection(db, 'patients')
+    : query(collection(db, 'patients'), where('doctorIds', 'array-contains', userId));
+  const latest = await getDocsFromServer(patientsQuery);
+  const matches = findPotentialDuplicates(input, latest.docs.map(patientFromDoc));
+  if (matches.length && !confirmedPotentialDuplicate) {
+    throw Error('A potential duplicate was found in the latest directory. Review existing charts before creating a new record.');
+  }
   return addDoc(collection(db, 'patients'), {
     ...input,
     createdBy: userId,
