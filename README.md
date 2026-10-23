@@ -135,3 +135,10 @@ It uses a Firebase CLI internal authentication helper that may change versions;
 if unavailable, it fails closed.
 
 Read STAGING_RECOVERY.md before trusting the archive for disaster recovery.
+
+After restoring to staging, re-verify every document's typed fields without
+writing any data:
+
+    node functions/scripts/clinic-backup.cjs check-staging --file="C:\private-clinic-backups\2026-10-23.pcmbackup" --project=your-isolated-staging
+
+The restore command also runs this comparison automatically after all writes.

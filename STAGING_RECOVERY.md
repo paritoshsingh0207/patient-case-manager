@@ -59,3 +59,12 @@ Provision separate test accounts as necessary.
 
 Record a verified staging restore and manually signed-off tests before any
 production rollout. Passing synthetic unit tests is not a real restore drill.
+
+After any completed staging restore, independently repeat the read-only check:
+
+    node functions/scripts/clinic-backup.cjs check-staging --file="C:\private-clinic-backups\2026-10-23.pcmbackup" --project=ISOLATED-STAGING
+
+The verification compares every restored Firestore document path and field value,
+including nested clinical records and reference values retargeted to staging.
+A successful synthetic cryptographic test or CLI dry run does not certify a
+successful live staging restore.

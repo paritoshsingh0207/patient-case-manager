@@ -18,8 +18,8 @@ const args=process.argv.slice(2),mode=args[0];
 const opt=n=>{const x=args.slice(1).find(y=>y.startsWith('--'+n+'='));return x?.slice(n.length+3)??null};
 const flag=n=>args.slice(1).includes('--'+n);
 const fail=s=>{throw Error(s)};
-if(!['export','verify','restore'].includes(mode)){
- console.error('Usage: clinic-backup.cjs export|verify|restore [--project=PROJECT] [--out=FILE | --file=FILE]');
+if(!['export','verify','restore','check-staging'].includes(mode)){
+ console.error('Usage: clinic-backup.cjs export|verify|restore|check-staging [--project=PROJECT] [--out=FILE | --file=FILE]');
  process.exit(2);
 }
 const project=opt('project'),file=opt('file'),out=opt('out');
@@ -162,11 +162,41 @@ function retargetFields(fields,source,target){
  return Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,convert(v)]));
 }
 async function isEmpty(project,token){
+ // Reject any existing top-level collection, including unrelated Awakening data.
+ let page='';
+ do {
+  const body={pageSize:100};if(page)body.pageToken=page;
+  const result=await api(urlFor(project,'')+':listCollectionIds',token,'POST',body);
+  if(result.collectionIds?.length)
+   fail('Staging destination is NOT empty (existing collection IDs). Choose a fresh isolated staging project; no writes made.');
+  page=result.nextPageToken||'';
+ }while(page);
  for(const root of ROOTS){
   const url=new URL(urlFor(project,root));url.searchParams.set('pageSize','1');
   const result=await api(url.toString(),token);
   if(result?.documents?.length)fail('Staging destination has existing '+root+' records. Use a NEW isolated staging project; no writes made.');
  }
+}
+function canonicalFields(value){
+ if(Array.isArray(value))return value.map(canonicalFields);
+ if(value&&typeof value==='object')
+  return Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonicalFields(value[key])]));
+ return value;
+}
+async function verifyStaging(archive,target,token){
+ const actual=await exportDocs(target,token);
+ const expected=archive.documents.map(doc=>({path:doc.path,
+  fields:retargetFields(doc.fields,archive.sourceProject,target)}));
+ if(actual.documents.length!==expected.length)
+  fail('Staging restore verification failed: document count differs.');
+ const byPath=new Map(actual.documents.map(x=>[x.path,x.fields]));
+ for(const doc of expected){
+  const found=byPath.get(doc.path);
+  if(!found||JSON.stringify(canonicalFields(found))!==JSON.stringify(canonicalFields(doc.fields)))
+   fail('Staging restore verification failed at a clinical document (content mismatch).');
+ }
+ console.log('STAGING_RESTORE_VERIFIED '+expected.length+' documents with matching typed fields.');
+ return expected.length;
 }
 async function restoreDocs(archive,target,token){
  await isEmpty(target,token);
@@ -212,6 +242,11 @@ async function main(){
   if(!validProject(project)||project===archive.sourceProject)fail('Restore target must be a different, isolated Firebase project.');
   if(!(/-staging$|-test$/.test(project)||project.startsWith('demo-')))
    fail('Refusing restore: staging project ID must end -staging/-test or start demo-.');
+  if(mode==='check-staging'){
+   const token=tokenProvider();
+   await verifyStaging(archive,project,token);
+   return;
+  }
   if(!flag('apply')){
    console.log('DRY RUN ONLY. Restore target: '+project+'. Add --apply --confirm-staging='+project+' for an EMPTY staging project.');
    return;
@@ -220,8 +255,10 @@ async function main(){
   const token=tokenProvider();
   try {
    const n=await restoreDocs(archive,project,token);
-   console.log('STAGING_RESTORE_CREATED '+n+' documents. Firebase Authentication accounts and Hosting are NOT restored.');
-  }catch(e){console.error('RESTORE INCOMPLETE. Do not rerun against partially populated staging. Use a fresh staging project.');throw e}
+   console.log('STAGING_RESTORE_CREATED '+n+' documents. Checking every restored document...');
+   await verifyStaging(archive,project,token);
+   console.log('Firebase Authentication accounts and Hosting are NOT restored.');
+  }catch(e){console.error('RESTORE INCOMPLETE/UNVERIFIED. Do not rerun writes into this staging project. Use a fresh staging project.');throw e}
  }
 }
 main().catch(e=>{console.error('Clinic backup error: '+e.message);process.exitCode=1});
