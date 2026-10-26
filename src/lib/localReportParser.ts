@@ -14,7 +14,7 @@ export interface ReportPage {
   confidence?: number;
   warning?: string;
 }
-export interface ReportResult { pdf: PDFDocumentProxy; pages: ReportPage[] }
+export interface ReportResult { pdf: PDFDocumentProxy; pages: ReportPage[]; dispose: () => Promise<void> }
 export interface ReportProgress {
   page: number;
   total: number;
@@ -108,7 +108,7 @@ export async function extractLocalReport(file: File, opts: ParserOptions = {}): 
   const bytes = new Uint8Array(await file.arrayBuffer());
   validatePdf(file, bytes);
   check(signal);
-  const task = getDocument({ data: bytes, isEvalSupported: false });
+  const task = getDocument({ data: bytes });
   const cancelLoading = () => { void task.destroy(); };
   signal?.addEventListener('abort', cancelLoading, { once: true });
   let pdf: PDFDocumentProxy | undefined;
@@ -165,9 +165,9 @@ export async function extractLocalReport(file: File, opts: ParserOptions = {}): 
     }
     check(signal);
     onProgress?.({ page: pdf.numPages, total: pdf.numPages, phase: 'finished' });
-    return { pdf, pages };
+    return { pdf, pages, dispose: () => task.destroy() };
   } catch (error) {
-    if (pdf) await pdf.destroy().catch(() => {});
+    await task.destroy().catch(() => {});
     throw error;
   } finally {
     signal?.removeEventListener('abort', cancelLoading);

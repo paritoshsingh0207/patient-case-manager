@@ -71,7 +71,7 @@ describe('local-only medical report parser', () => {
     expect(result.pages[0].method).toBe('text-layer');
     expect(mocks.createWorker).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
-    await result.pdf.destroy();
+    await result.dispose();
   });
   it('runs only same-origin OCR fallback for a mixed report', async () => {
     mockDocument(mockPage('A sufficiently long, native text page on a synthetic report'), mockPage('', true));
@@ -84,7 +84,7 @@ describe('local-only medical report parser', () => {
       langPath: '/ocr/lang',
       cacheMethod: 'none'
     });
-    await result.pdf.destroy();
+    await result.dispose();
   });
   it('stops immediately on pre-cancelled extraction', async () => {
     const ctrl = new AbortController(); ctrl.abort();

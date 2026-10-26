@@ -15,6 +15,7 @@ export function LocalReportParser({ patientId }: { patientId: string }) {
   const [error, setError] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
+  const releaseRef = useRef<(() => Promise<void>) | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const renderRef = useRef<RenderTask | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,9 +29,10 @@ export function LocalReportParser({ patientId }: { patientId: string }) {
     controllerRef.current = null;
     renderRef.current?.cancel();
     renderRef.current = null;
-    const old = pdfRef.current;
+    const release = releaseRef.current;
+    releaseRef.current = null;
     pdfRef.current = null;
-    if (old) void old.destroy().catch(() => {});
+    if (release) void release().catch(() => {});
     if (pickerRef.current) pickerRef.current.value = '';
     if (canvasRef.current) { canvasRef.current.width = 0; canvasRef.current.height = 0; }
     if (mounted.current) {
@@ -60,10 +62,11 @@ export function LocalReportParser({ patientId }: { patientId: string }) {
         },
       });
       if (controller.signal.aborted || !mounted.current || id !== sequence.current) {
-        await result.pdf.destroy().catch(() => {});
+        await result.dispose().catch(() => {});
         return;
       }
       pdfRef.current = result.pdf;
+      releaseRef.current = result.dispose;
       setPages(result.pages);
       setSelectedPage(1);
       setProgress(null);
