@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
     "preview": "vite preview",
-    "test": "vitest run src/lib && node --test functions/scripts/backup-format.test.cjs",
+    "test": "vitest run src/lib tests/localReportParser.test.ts && node --test functions/scripts/backup-format.test.cjs",
     "test:backup": "node --test functions/scripts/backup-format.test.cjs",
     "test:rules": "firebase emulators:exec --project demo-patient-case-manager --only firestore \"vitest run tests/firestore.rules.test.ts\"",
     "test:all": "npm run test && npm run test:rules && npm run test:storage",
