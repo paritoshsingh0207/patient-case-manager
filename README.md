@@ -22,7 +22,7 @@ or Cloud Storage. The functions/ directory holds trusted offline admin scripts.
 - Authorized clinicians can edit patient demographics, medical history, allergies and medicine lists; concurrent edits to the same field are blocked to prevent unnoticed overwrites, and assignments remain admin-controlled.
 - Patient creation warns about **possible duplicates** using pairs of matching identity details. Doctors see only assigned charts; administrators can review potential duplicates clinic-wide. Creating another record despite a warning requires explicit acknowledgement; charts are never merged automatically.
 - Append-only recent admin activity for doctor status and patient access changes; this does not replace server-side comprehensive audit logging.
-- Doctor-only Extract Report tab processes PDFs locally in the browser with PDF.js and OCR; source files and extracted text are not uploaded or saved.
+- Doctor-only Extract Report tab processes PDFs locally with PDF.js and OCR. After a clinician reviews and confirms the transcription, **text only** can be saved as a separate immutable document in `patients/{patientId}/reports/{reportId}` on Firestore Spark. The original PDF is never uploaded. The Saved Reports tab is readable by authorized active care-team members and administrators.
 
 ## Setup
 
@@ -76,6 +76,21 @@ After review, backup and explicit release approval:
 The importer rejects mismatched names, codes, legacy aliases, previously
 archived entries or unapproved releases, and is safe to retry for approved
 matching data. Firestore reads/writes count against Spark quotas.
+
+## Saved medical report transcriptions (Spark, no Storage)
+
+An active assigned doctor can extract, review, correct and save the **text** of
+each report to its patient's `reports` Firestore subcollection. Each save creates
+a new immutable document containing page-separated text, report name, page count,
+author, extraction mode flag and server timestamp. Patient-scoped access and
+immutable writes are enforced by `firestore.rules`. A **Saved Reports** tab lets
+authorized clinicians and administrators view previous transcriptions later.
+
+The extracted content is limited to 120,000 UTF-8 bytes per report. Saving
+requires explicit clinical review acknowledgment; OCR may still contain errors.
+No original PDF bytes, images, Firebase Storage, Blaze upgrade or Cloud
+Functions are involved. Firestore reads/writes/storage use Spark free quotas.
+See `docs/LOCAL_REPORT_PARSER_PHASE1.md` for test and release instructions.
 
 ## Tests and manual deployment
 
