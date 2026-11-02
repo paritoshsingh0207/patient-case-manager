@@ -19,6 +19,7 @@ import { PrescriptionPanel } from './components/PrescriptionPanel';
 import { FollowUpPanel } from './components/FollowUpPanel';
 import { DuplicateReviewPanel } from './components/DuplicateReviewPanel';
 import { PatientAttachments } from './components/PatientAttachments';
+import { LocalReportParser } from './components/LocalReportParser';
 import { patientInputFromRecord } from './lib/patientEdits';
 import { hasWorkspaceAccess, matchesLoginRole, subscribePractitionerAccess, type LoginRole } from './services/accessService';
 import {
@@ -459,7 +460,7 @@ function PatientWorkspace({
   addCase,
   persistSuggestion,
 }: PatientWorkspaceProps) {
-  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'|'followups'|'attachments'>('history');
+  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'|'followups'|'attachments'|'extract-report'>('history');
   useEffect(()=>setPatientTab('history'),[selectedPatientId]);
   return (
     <div className="workspace-layout">
@@ -523,6 +524,10 @@ function PatientWorkspace({
               <button type="button" className={patientTab==='attachments'?'selected':''}
                 aria-current={patientTab==='attachments'?'page':undefined}
                 onClick={()=>setPatientTab('attachments')}><ClinicIcon name="file"/> Lab reports & files</button>
+              {isDoctor && selectedPatient.doctorIds.includes(userId) ? <button type="button"
+                className={patientTab==='extract-report'?'selected':''}
+                aria-current={patientTab==='extract-report'?'page':undefined}
+                onClick={()=>setPatientTab('extract-report')}><ClinicIcon name="file"/> Extract Report</button> : null}
               <button type="button" className={patientTab==='prescriptions'?'selected':''}
                 aria-current={patientTab==='prescriptions'?'page':undefined}
                 onClick={()=>setPatientTab('prescriptions')}><ClinicIcon name="file"/> Prescriptions</button>
@@ -539,6 +544,8 @@ function PatientWorkspace({
               userId={userId} canManage={isDoctor}/>:null}
             {patientTab==='attachments'?<PatientAttachments key={selectedPatient.id}
               db={db} storage={storage} patientId={selectedPatient.id} userId={userId}/>:null}
+            {patientTab==='extract-report' && isDoctor && selectedPatient.doctorIds.includes(userId) ?
+              <LocalReportParser key={selectedPatient.id} patientId={selectedPatient.id} /> : null}
             {patientTab==='prescriptions'?<PrescriptionPanel
               key={selectedPatient.id} db={db} patient={selectedPatient} userId={userId} practitionerName={practitionerName}
               canPrescribe={isDoctor}

@@ -19,3 +19,6 @@ functions/lib/
 *.backup.gz
 backups/
 restore-work/
+
+# Same-origin OCR assets generated from npm packages
+/public/ocr/
