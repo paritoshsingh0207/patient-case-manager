@@ -9,7 +9,7 @@ import type {
   PractitionerAccess,
   SuggestionResult,
 } from './types';
-import { auth, db, storage, firebaseReady } from './lib/firebase';
+import { auth, db, firebaseReady } from './lib/firebase';
 import { AuthPanel } from './components/AuthPanel';
 import { PatientForm } from './components/PatientForm';
 import { CaseEditor } from './components/CaseEditor';
@@ -18,7 +18,6 @@ import { MedicineCodeManager } from './components/MedicineCodeManager';
 import { PrescriptionPanel } from './components/PrescriptionPanel';
 import { FollowUpPanel } from './components/FollowUpPanel';
 import { DuplicateReviewPanel } from './components/DuplicateReviewPanel';
-import { PatientAttachments } from './components/PatientAttachments';
 import { LocalReportParser } from './components/LocalReportParser';
 import { patientInputFromRecord } from './lib/patientEdits';
 import { hasWorkspaceAccess, matchesLoginRole, subscribePractitionerAccess, type LoginRole } from './services/accessService';
@@ -460,7 +459,7 @@ function PatientWorkspace({
   addCase,
   persistSuggestion,
 }: PatientWorkspaceProps) {
-  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'|'followups'|'attachments'|'extract-report'>('history');
+  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'|'followups'|'extract-report'>('history');
   useEffect(()=>setPatientTab('history'),[selectedPatientId]);
   return (
     <div className="workspace-layout">
@@ -521,9 +520,6 @@ function PatientWorkspace({
               <button type="button" className={patientTab==='followups'?'selected':''}
                 aria-current={patientTab==='followups'?'page':undefined}
                 onClick={()=>setPatientTab('followups')}><ClinicIcon name="history"/> Follow-ups</button>
-              <button type="button" className={patientTab==='attachments'?'selected':''}
-                aria-current={patientTab==='attachments'?'page':undefined}
-                onClick={()=>setPatientTab('attachments')}><ClinicIcon name="file"/> Lab reports & files</button>
               {isDoctor && selectedPatient.doctorIds.includes(userId) ? <button type="button"
                 className={patientTab==='extract-report'?'selected':''}
                 aria-current={patientTab==='extract-report'?'page':undefined}
@@ -542,8 +538,6 @@ function PatientWorkspace({
             />:null}
             {patientTab==='followups'?<FollowUpPanel key={selectedPatient.id} db={db} patientId={selectedPatient.id}
               userId={userId} canManage={isDoctor}/>:null}
-            {patientTab==='attachments'?<PatientAttachments key={selectedPatient.id}
-              db={db} storage={storage} patientId={selectedPatient.id} userId={userId}/>:null}
             {patientTab==='extract-report' && isDoctor && selectedPatient.doctorIds.includes(userId) ?
               <LocalReportParser key={selectedPatient.id} patientId={selectedPatient.id} /> : null}
             {patientTab==='prescriptions'?<PrescriptionPanel
