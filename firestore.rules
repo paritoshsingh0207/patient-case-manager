@@ -207,6 +207,32 @@ service cloud.firestore {
           && request.resource.data.completedAt == request.time;
         allow delete: if false;
       }
+      // One immutable reviewed-text report per document. No PDF/image binary is
+      // accepted. Enforce patient assignment and bounded text on Spark.
+      match /reports/{reportId} {
+        allow read: if canAccessPatient(patientId);
+        allow create: if childBelongsToCaller(patientId)
+          && request.resource.data.keys().hasOnly([
+            'patientId','createdBy','reportName','content','pageCount',
+            'ocrUsed','reviewed','schemaVersion','createdAt'])
+          && request.resource.data.keys().hasAll([
+            'patientId','createdBy','reportName','content','pageCount',
+            'ocrUsed','reviewed','schemaVersion','createdAt'])
+          && request.resource.data.reportName is string
+          && request.resource.data.reportName.size() > 0
+          && request.resource.data.reportName.size() <= 120
+          && request.resource.data.content is string
+          && request.resource.data.content.size() > 0
+          && request.resource.data.content.size() <= 120000
+          && request.resource.data.pageCount is int
+          && request.resource.data.pageCount >= 1
+          && request.resource.data.pageCount <= 50
+          && request.resource.data.ocrUsed is bool
+          && request.resource.data.reviewed == true
+          && request.resource.data.schemaVersion == 1
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
       match /prescriptions/{prescriptionId} {
         allow read: if canAccessPatient(patientId);
         allow create: if validPrescription(patientId);

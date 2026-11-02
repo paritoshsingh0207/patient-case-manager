@@ -683,3 +683,100 @@ describe('retired patient file metadata endpoint', () => {
     }
   });
 });
+
+
+describe('patient-scoped reviewed report text (Spark / no Storage)', () => {
+  const sample = {
+    patientId: 'patient-a',
+    createdBy: 'doctor-a',
+    reportName: 'Synthetic lab report.pdf',
+    content: 'Page 1\\nHemoglobin: 13.8 g/dL',
+    pageCount: 1,
+    ocrUsed: false,
+    reviewed: true,
+    schemaVersion: 1,
+    createdAt: serverTimestamp(),
+  };
+
+  it('allows an assigned active doctor to save; care team and admin may read, outsider may not', async () => {
+    await seedUser('doctor-a', 'doctor');
+    await seedUser('doctor-b', 'doctor');
+    await seedUser('administrator', 'admin');
+    await seedPatient('patient-a', ['doctor-a']);
+    const assigned = testEnv.authenticatedContext('doctor-a').firestore();
+    const other = testEnv.authenticatedContext('doctor-b').firestore();
+    const admin = testEnv.authenticatedContext('administrator').firestore();
+    const report = doc(assigned, 'patients/patient-a/reports/report-one');
+    await assertSucceeds(setDoc(report, sample));
+    await assertSucceeds(getDoc(report));
+    await assertSucceeds(getDocs(collection(assigned, 'patients/patient-a/reports')));
+    await assertSucceeds(getDoc(doc(admin, 'patients/patient-a/reports/report-one')));
+    await assertFails(getDoc(doc(other, 'patients/patient-a/reports/report-one')));
+    await assertFails(getDocs(collection(other, 'patients/patient-a/reports')));
+    await assertFails(setDoc(doc(other, 'patients/patient-a/reports/forged'), {
+      ...sample, createdBy: 'doctor-b',
+    }));
+    await assertFails(setDoc(doc(admin, 'patients/patient-a/reports/forged'), {
+      ...sample, createdBy: 'administrator',
+    }));
+  });
+
+  it('revokes access after doctor removal and blocks inactive or unverified self-registrants', async () => {
+    await seedUser('doctor-a', 'doctor');
+    await seedUser('inactive', 'doctor', false);
+    await seedUser('unverified', 'doctor');
+    await seedPatient('patient-a', ['doctor-a', 'inactive', 'unverified']);
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await updateDoc(doc(ctx.firestore(), 'users/unverified'), {
+        registrationMethod: 'self',
+      });
+    });
+    const assigned = testEnv.authenticatedContext('doctor-a').firestore();
+    await assertSucceeds(setDoc(doc(assigned, 'patients/patient-a/reports/r1'), sample));
+    const inactive = testEnv.authenticatedContext('inactive').firestore();
+    const unverified = testEnv.authenticatedContext('unverified', {
+      email_verified: false,
+    }).firestore();
+    await assertFails(getDoc(doc(inactive, 'patients/patient-a/reports/r1')));
+    await assertFails(getDoc(doc(unverified, 'patients/patient-a/reports/r1')));
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await updateDoc(doc(ctx.firestore(), 'patients/patient-a'), {
+        doctorIds: ['inactive', 'unverified'],
+      });
+    });
+    await assertFails(getDoc(doc(assigned, 'patients/patient-a/reports/r1')));
+    await assertFails(setDoc(doc(assigned, 'patients/patient-a/reports/r2'), sample));
+  });
+
+  it('rejects alterations, deletions, cross-patient links and invalid payloads', async () => {
+    await seedUser('doctor-a', 'doctor');
+    await seedPatient('patient-a', ['doctor-a']);
+    await seedPatient('patient-b', []);
+    const doctor = testEnv.authenticatedContext('doctor-a').firestore();
+    const reference = doc(doctor, 'patients/patient-a/reports/saved');
+    await assertSucceeds(setDoc(reference, sample));
+    await assertFails(updateDoc(reference, { content: 'tampered' }));
+    await assertFails(deleteDoc(reference));
+    await assertFails(setDoc(doc(doctor, 'patients/patient-a/reports/forged'), {
+      ...sample, createdBy: 'another-doctor',
+    }));
+    await assertFails(setDoc(doc(doctor, 'patients/patient-a/reports/wrong-patient'), {
+      ...sample, patientId: 'patient-b',
+    }));
+    await assertFails(setDoc(doc(doctor, 'patients/patient-b/reports/outside'), {
+      ...sample, patientId: 'patient-b',
+    }));
+    await assertFails(setDoc(doc(doctor, 'patients/patient-a/reports/extra'), {
+      ...sample, binaryUrl: 'gs://not-allowed',
+    }));
+    await assertFails(setDoc(doc(doctor, 'patients/patient-a/reports/unreviewed'), {
+      ...sample, reviewed: false,
+    }));
+    await assertFails(setDoc(doc(doctor, 'patients/patient-a/reports/oversized'), {
+      ...sample, content: 'X'.repeat(120001),
+    }));
+    await assertFails(setDoc(doc(doctor, 'patients/patient-a/reports/bad-pages'), {
+      ...sample, pageCount: 51,
+    }));
+  });
+});

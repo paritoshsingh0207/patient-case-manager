@@ -1,19 +1,27 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import type { Firestore } from 'firebase/firestore';
+import { saveReviewedPatientReport } from '../services/reportService';
 import {
   extractLocalReport, MAX_REPORT_BYTES, publicReportError,
   type ReportPage, type ReportProgress,
 } from '../lib/localReportParser';
 import './LocalReportParser.css';
 
-/** Phase 1 deliberately has no Firebase imports, persistence, or remote AI. */
-export function LocalReportParser({ patientId }: { patientId: string }) {
+/** PDF parsing stays in the browser; only explicitly reviewed text is sent to Firestore. */
+export function LocalReportParser({ db, patientId, userId, onSaved }: {
+  db: Firestore; patientId: string; userId: string; onSaved: () => void;
+}) {
   const [pages, setPages] = useState<ReportPage[]>([]);
   const [selectedPage, setSelectedPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<ReportProgress | null>(null);
   const [error, setError] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
+  const [reportName, setReportName] = useState('');
+  const [reviewed, setReviewed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
   const releaseRef = useRef<(() => Promise<void>) | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -38,6 +46,7 @@ export function LocalReportParser({ patientId }: { patientId: string }) {
     if (mounted.current) {
       setPages([]); setSelectedPage(1); setError(''); setBusy(false);
       setProgress(null); setConfirmClear(false);
+      setReportName(''); setReviewed(false); setSaveError('');
     }
   }, []);
 
@@ -68,6 +77,8 @@ export function LocalReportParser({ patientId }: { patientId: string }) {
       pdfRef.current = result.pdf;
       releaseRef.current = result.dispose;
       setPages(result.pages);
+      setReportName(file.name.slice(0, 120));
+      setReviewed(false);
       setSelectedPage(1);
       setProgress(null);
     } catch (cause) {
@@ -110,20 +121,38 @@ export function LocalReportParser({ patientId }: { patientId: string }) {
     return () => { ended = true; renderRef.current?.cancel(); };
   }, [pages.length, selectedPage]);
 
+  async function saveReport() {
+    if (!reviewed || saving || busy || !pages.length) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      await saveReviewedPatientReport(db, patientId, userId, reportName, pages);
+      // Switching tabs unmounts this component and discards the source PDF.
+      if (mounted.current) onSaved();
+    } catch {
+      if (mounted.current) setSaveError(
+        'Unable to save the report. Check the title, text-size limit (120,000 bytes), connection and patient access.'
+      );
+    } finally {
+      if (mounted.current) setSaving(false);
+    }
+  }
+
   const page = pages[selectedPage - 1];
 
   return <section className="workspace-card glass-panel local-report" aria-label="Local medical report extraction">
     <div className="section-heading">
       <div>
         <h2>Extract Report</h2>
-        <p className="section-copy">PDF and OCR stay in this browser. No report is uploaded, sent to AI or saved.</p>
+        <p className="section-copy">The original PDF and OCR processing stay in this browser.
+          Only the corrected text is saved to this patient's Firestore record when you choose Save.</p>
       </div>
-      <span className="status-pill">Phase 1 · No saving</span>
+      <span className="status-pill">Spark · Text-only saving</span>
     </div>
     <div className="local-report-controls">
       <label htmlFor="local-report-pdf"><strong>Choose medical PDF</strong>
         <input ref={pickerRef} id="local-report-pdf" type="file" accept=".pdf,application/pdf"
-          disabled={busy} onChange={selectReport} />
+          disabled={busy || saving} onChange={selectReport} />
       </label>
       <p className="quiet-note">PDF only · maximum {MAX_REPORT_BYTES / 1048576} MiB · 50 pages. Image-only pages use local English OCR.</p>
       {busy ? <div role="status" aria-live="polite" className="local-report-status">
@@ -162,19 +191,42 @@ export function LocalReportParser({ patientId }: { patientId: string }) {
           <label htmlFor="local-report-transcript">Review and correct transcription</label>
           <textarea id="local-report-transcript" rows={16} spellCheck={false}
             placeholder="No readable text; verify manually against the original page."
-            value={page.text} onChange={event => setPages(items => items.map(item =>
-              item.number === selectedPage ? { ...item, text: event.target.value } : item))}/>
+            value={page.text} disabled={saving} onChange={event => {
+              setReviewed(false);
+              setPages(items => items.map(item =>
+                item.number === selectedPage ? { ...item, text: event.target.value } : item));
+            }}/>
           <p className="quiet-note">Tables, values and units may be inaccurate. Compare every clinical value with the original image.</p>
         </div>
       </div>
+      <div className="local-report-save">
+        <h3>Save reviewed report text</h3>
+        <p className="quiet-note">Every save creates a separate, immutable document linked to this patient.
+          No PDF or image is uploaded. Text is limited to 120,000 UTF-8 bytes.</p>
+        <label htmlFor="reviewed-report-name">Report name</label>
+        <input id="reviewed-report-name" type="text" value={reportName}
+          maxLength={120} disabled={saving}
+          onChange={event => { setReportName(event.target.value); setReviewed(false); }} />
+        <label className="local-report-confirm">
+          <input type="checkbox" checked={reviewed} disabled={saving}
+            onChange={event => setReviewed(event.target.checked)} />
+          I reviewed the transcription against the original report and understand that OCR may contain errors.
+        </label>
+        {saveError ? <p role="alert" className="inline-error">{saveError}</p> : null}
+        <button className="button primary" type="button"
+          disabled={!reviewed || saving || busy || !reportName.trim()}
+          onClick={() => void saveReport()}>
+          {saving ? 'Saving…' : 'Save reviewed text to patient record'}
+        </button>
+      </div>
       <div className="local-report-footer">
-        <p className="quiet-note">All edits are temporary. Leaving this chart, refreshing, or clearing discards the report.</p>
+        <p className="quiet-note">Unsaved edits are temporary. Leaving this chart or clearing discards the PDF and any unsaved text.</p>
         {!confirmClear ? <button className="button secondary" type="button"
-          onClick={() => setConfirmClear(true)}>Clear report</button> :
+          disabled={saving} onClick={() => setConfirmClear(true)}>Clear report</button> :
           <div role="group" aria-label="Confirm clear report">
             <span>Discard report and edits? </span>
             <button className="button secondary" type="button" onClick={() => setConfirmClear(false)}>Keep</button>
-            <button className="button primary" type="button" onClick={discard}>Yes, clear</button>
+            <button className="button primary" type="button" disabled={saving} onClick={discard}>Yes, clear</button>
           </div>}
       </div>
     </> : null}
