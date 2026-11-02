@@ -27,7 +27,7 @@
 .saved-report-layout{display:grid;grid-template-columns:minmax(190px,250px) minmax(0,1fr);gap:16px;margin-top:18px}
 .saved-report-list{display:flex;flex-direction:column;gap:8px;max-height:650px;overflow:auto}
 .saved-report-item{width:100%;text-align:left;border:1px solid var(--line);border-radius:8px;background:#fff;display:grid;gap:6px;padding:12px;cursor:pointer}
-.saved-report-item.selected{border-color:var(--green);background:var(--mint)}
+.saved-report-item.selected{border-color:var(--green);background:#eef7f2}
 .saved-report-item strong{overflow-wrap:anywhere}
 .saved-report-item small{color:var(--muted)}
 .saved-report-detail{min-width:0}
