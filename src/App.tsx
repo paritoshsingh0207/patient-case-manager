@@ -19,6 +19,7 @@ import { PrescriptionPanel } from './components/PrescriptionPanel';
 import { FollowUpPanel } from './components/FollowUpPanel';
 import { DuplicateReviewPanel } from './components/DuplicateReviewPanel';
 import { LocalReportParser } from './components/LocalReportParser';
+import { SavedPatientReports } from './components/SavedPatientReports';
 import { patientInputFromRecord } from './lib/patientEdits';
 import { hasWorkspaceAccess, matchesLoginRole, subscribePractitionerAccess, type LoginRole } from './services/accessService';
 import {
@@ -459,7 +460,7 @@ function PatientWorkspace({
   addCase,
   persistSuggestion,
 }: PatientWorkspaceProps) {
-  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'|'followups'|'extract-report'>('history');
+  const [patientTab,setPatientTab]=useState<'history'|'consultation'|'prescriptions'|'followups'|'reports'|'extract-report'>('history');
   useEffect(()=>setPatientTab('history'),[selectedPatientId]);
   return (
     <div className="workspace-layout">
@@ -520,6 +521,9 @@ function PatientWorkspace({
               <button type="button" className={patientTab==='followups'?'selected':''}
                 aria-current={patientTab==='followups'?'page':undefined}
                 onClick={()=>setPatientTab('followups')}><ClinicIcon name="history"/> Follow-ups</button>
+              <button type="button" className={patientTab==='reports'?'selected':''}
+                aria-current={patientTab==='reports'?'page':undefined}
+                onClick={()=>setPatientTab('reports')}><ClinicIcon name="file"/> Saved Reports</button>
               {isDoctor && selectedPatient.doctorIds.includes(userId) ? <button type="button"
                 className={patientTab==='extract-report'?'selected':''}
                 aria-current={patientTab==='extract-report'?'page':undefined}
@@ -538,8 +542,12 @@ function PatientWorkspace({
             />:null}
             {patientTab==='followups'?<FollowUpPanel key={selectedPatient.id} db={db} patientId={selectedPatient.id}
               userId={userId} canManage={isDoctor}/>:null}
+            {patientTab==='reports'?<SavedPatientReports key={selectedPatient.id}
+              db={db} patientId={selectedPatient.id}/>:null}
             {patientTab==='extract-report' && isDoctor && selectedPatient.doctorIds.includes(userId) ?
-              <LocalReportParser key={selectedPatient.id} patientId={selectedPatient.id} /> : null}
+              <LocalReportParser key={selectedPatient.id} db={db}
+                patientId={selectedPatient.id} userId={userId}
+                onSaved={() => setPatientTab('reports')} /> : null}
             {patientTab==='prescriptions'?<PrescriptionPanel
               key={selectedPatient.id} db={db} patient={selectedPatient} userId={userId} practitionerName={practitionerName}
               canPrescribe={isDoctor}
