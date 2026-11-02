@@ -36,6 +36,6 @@ Verify Network does not transmit PDF content or extracted text.
 - OCR can alter units, tables, decimals and other clinical details.
 - WASM/OCR assets consume Firebase Hosting transfer and storage quotas.
 - Local buffers may survive briefly inside browser/OS memory after clearing.
-- Existing optional Blaze-only attachment tab is independent and unchanged.
+- No file-upload service is enabled; keep original PDFs and transcriptions on the clinician's device.
 - No AI calls, report saving, database schema or clinical sign-off is included.
 - Do not deploy before clinical/security acceptance and complete CI checks.
